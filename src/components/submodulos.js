@@ -1,0 +1,351 @@
+// ============================================
+// Gestión de Módulos Comunes (CRUD) + Unidades
+// ============================================
+import { getContentArea, getPanelRight } from './layout.js';
+import { icons, showToast, createModal, confirmDialog, sanitize } from '../utils/helpers.js';
+import { fetchAll, create, update, remove } from '../utils/data.js';
+
+let expandedCard = null; // ID del módulo común expandido para ver unidades
+
+export async function renderSubmodulos() {
+  const content = getContentArea();
+  const panel = getPanelRight();
+
+  const submodulos = await fetchAll('submodulos');
+  const modulos = await fetchAll('modulos');
+  const unidades = await fetchAll('unidades');
+
+  content.innerHTML = `
+    <div class="section-header">
+      <h1 class="section-title">Gestionar Módulos Comunes</h1>
+      <div class="section-actions">
+        <button class="btn btn-add" id="btn-add-submodulo">
+          ${icons.plus} Nuevo Módulo Común
+        </button>
+      </div>
+    </div>
+
+    ${submodulos.length === 0 ? `
+      <div class="empty-state">
+        ${icons.submodulos}
+        <h3 class="empty-state-title">No hay módulos comunes</h3>
+        <p class="empty-state-text">Creá un módulo común y asocialo a un módulo específico existente.</p>
+      </div>
+    ` : `
+      <div class="cards-grid" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
+        ${submodulos.map(sub => {
+    const mod = modulos.find(m => m.id === sub.modulo_id);
+    const subUnidades = unidades
+      .filter(u => u.submodulo_id === sub.id)
+      .sort((a, b) => (a.orden || 0) - (b.orden || 0));
+    const isExpanded = expandedCard === sub.id;
+
+    return `
+            <div class="card" data-id="${sub.id}" style="align-items: stretch; cursor: default;">
+              <div class="card-actions">
+                <button class="card-action-btn edit-btn" data-id="${sub.id}" title="Editar">${icons.edit}</button>
+                <button class="card-action-btn delete card-action-btn-del" data-id="${sub.id}" title="Eliminar">${icons.trash}</button>
+              </div>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div class="card-avatar submodulo" style="width: 48px; height: 48px; font-size: 1rem; flex-shrink: 0;">
+                  ${sanitize(sub.nombre?.charAt(0) || 'M')}
+                </div>
+                <div>
+                  <div class="card-name" style="text-align: left;">${sanitize(sub.nombre)}</div>
+                  <div class="card-subtitle" style="text-align: left; margin-top: 2px;">Mód. Específico: ${mod ? sanitize(mod.nombre) : 'Sin módulo'}</div>
+                </div>
+              </div>
+
+              <!-- Unidades -->
+              <div style="width: 100%; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-color);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                  <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 600;">
+                    Unidades (${subUnidades.length})
+                  </span>
+                  <button class="btn btn-secondary add-unidad-btn" data-subid="${sub.id}" style="padding: 4px 10px; font-size: 0.75rem; border-radius: 6px;">
+                    ${icons.plus} Agregar
+                  </button>
+                </div>
+                ${subUnidades.length === 0 ? `
+                  <p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 8px 0;">Sin unidades</p>
+                ` : `
+                  <div class="unidades-list" data-subid="${sub.id}">
+                    ${subUnidades.map((u, idx) => `
+                      <div class="unidad-item" data-uid="${u.id}">
+                        <span class="unidad-orden">${u.orden || (idx + 1)}</span>
+                        <span class="unidad-nombre">${sanitize(u.nombre)}</span>
+                        <div class="unidad-actions">
+                          <button class="unidad-action-btn edit-unidad-btn" data-uid="${u.id}" data-subid="${sub.id}" title="Editar">${icons.edit}</button>
+                          <button class="unidad-action-btn delete del-unidad-btn" data-uid="${u.id}" title="Eliminar">${icons.trash}</button>
+                        </div>
+                      </div>
+                    `).join('')}
+                  </div>
+                `}
+              </div>
+            </div>
+          `;
+  }).join('')}
+      </div>
+    `}
+
+    <style>
+      .unidad-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border-color);
+        margin-bottom: 4px;
+        transition: all 0.2s ease;
+      }
+      .unidad-item:hover {
+        background: rgba(139, 92, 246, 0.06);
+        border-color: var(--border-color-light);
+      }
+      .unidad-orden {
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
+        background: var(--gradient-purple);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: 700;
+        flex-shrink: 0;
+      }
+      .unidad-nombre {
+        flex: 1;
+        font-size: 0.8125rem;
+        color: var(--text-primary);
+      }
+      .unidad-actions {
+        display: flex;
+        gap: 4px;
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+      .unidad-item:hover .unidad-actions {
+        opacity: 1;
+      }
+      .unidad-action-btn {
+        width: 24px;
+        height: 24px;
+        border-radius: 4px;
+        border: 1px solid var(--border-color);
+        background: var(--bg-secondary);
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.15s;
+        padding: 0;
+      }
+      .unidad-action-btn svg {
+        width: 12px;
+        height: 12px;
+      }
+      .unidad-action-btn:hover {
+        border-color: var(--accent-purple);
+        color: var(--accent-purple-light);
+      }
+      .unidad-action-btn.delete:hover {
+        border-color: var(--accent-red);
+        color: var(--accent-red);
+        background: rgba(239, 68, 68, 0.1);
+      }
+    </style>
+  `;
+
+  // Panel
+  const totalUnidades = unidades.length;
+  panel.innerHTML = `
+    <div class="widget">
+      <div class="widget-header"><span class="widget-title">Módulos Comunes</span></div>
+      <div class="widget-stats">
+        <div class="widget-stat">
+          <div class="widget-stat-value">${submodulos.length}</div>
+          <div class="widget-stat-label">Módulos</div>
+        </div>
+        <div class="widget-stat">
+          <div class="widget-stat-value">${totalUnidades}</div>
+          <div class="widget-stat-label">Unidades</div>
+        </div>
+      </div>
+    </div>
+    <div class="widget widget-gradient">
+      <div class="widget-header"><span class="widget-title">📖 Unidades</span></div>
+      <p style="font-size: 0.8125rem; color: var(--text-secondary); line-height: 1.5;">
+        Cada módulo común puede contener múltiples unidades (Unidad 1, Unidad 2, etc.). Usá el botón "Agregar" en cada tarjeta.
+      </p>
+    </div>
+  `;
+
+  // === Eventos ===
+
+  // Agregar módulo común
+  document.getElementById('btn-add-submodulo')?.addEventListener('click', () => openSubmoduloModal(null, modulos));
+
+  // Editar módulo común
+  content.querySelectorAll('.edit-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const sub = submodulos.find(s => s.id === btn.dataset.id);
+      if (sub) openSubmoduloModal(sub, modulos);
+    });
+  });
+
+  // Eliminar módulo común
+  content.querySelectorAll('.card-action-btn-del').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const sub = submodulos.find(s => s.id === btn.dataset.id);
+      if (sub) {
+        confirmDialog(`¿Eliminar el módulo común <strong>${sanitize(sub.nombre)}</strong>? Esto también eliminará sus unidades.`, async () => {
+          // Eliminar unidades asociadas primero (en modo local)
+          const subUnidades = unidades.filter(u => u.submodulo_id === sub.id);
+          for (const u of subUnidades) {
+            await remove('unidades', u.id);
+          }
+          await remove('submodulos', sub.id);
+          showToast('Módulo común eliminado');
+          renderSubmodulos();
+        });
+      }
+    });
+  });
+
+  // Agregar unidad
+  content.querySelectorAll('.add-unidad-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const subId = btn.dataset.subid;
+      const subUnidades = unidades.filter(u => u.submodulo_id === subId);
+      const nextOrden = subUnidades.length + 1;
+      openUnidadModal(null, subId, nextOrden);
+    });
+  });
+
+  // Editar unidad
+  content.querySelectorAll('.edit-unidad-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const unidad = unidades.find(u => u.id === btn.dataset.uid);
+      if (unidad) openUnidadModal(unidad, btn.dataset.subid);
+    });
+  });
+
+  // Eliminar unidad
+  content.querySelectorAll('.del-unidad-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const unidad = unidades.find(u => u.id === btn.dataset.uid);
+      if (unidad) {
+        confirmDialog(`¿Eliminar la unidad <strong>${sanitize(unidad.nombre)}</strong>?`, async () => {
+          await remove('unidades', unidad.id);
+          showToast('Unidad eliminada');
+          renderSubmodulos();
+        });
+      }
+    });
+  });
+}
+
+// Modal para crear/editar módulo común
+function openSubmoduloModal(submodulo, modulos) {
+  const isEdit = !!submodulo;
+  const formHTML = `
+    <div class="form-group">
+      <label class="form-label">Nombre del Módulo Común</label>
+      <input type="text" class="form-input" id="sub-nombre" value="${isEdit ? sanitize(submodulo.nombre) : ''}" required placeholder="Ej: Comunicación" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Módulo Específico Asociado</label>
+      <select class="form-select" id="sub-modulo">
+        <option value="">Seleccionar módulo específico...</option>
+        ${modulos.map(m => `
+          <option value="${m.id}" ${isEdit && submodulo.modulo_id === m.id ? 'selected' : ''}>${sanitize(m.nombre)}</option>
+        `).join('')}
+      </select>
+    </div>
+  `;
+
+  const footerHTML = `
+    <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+    <button class="btn btn-primary" id="modal-save">${isEdit ? 'Guardar' : 'Crear Módulo Común'}</button>
+  `;
+
+  const overlay = createModal(isEdit ? 'Editar Módulo Común' : 'Nuevo Módulo Común', formHTML, footerHTML);
+
+  overlay.querySelector('#modal-cancel').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#modal-save').addEventListener('click', async () => {
+    const nombre = document.getElementById('sub-nombre').value.trim();
+    const modulo_id = document.getElementById('sub-modulo').value || null;
+
+    if (!nombre) { showToast('Ingresá el nombre del módulo común', 'error'); return; }
+    if (!modulo_id) { showToast('Seleccioná un módulo específico', 'error'); return; }
+
+    try {
+      if (isEdit) {
+        await update('submodulos', submodulo.id, { nombre, modulo_id });
+        showToast('Módulo común actualizado');
+      } else {
+        await create('submodulos', { nombre, modulo_id });
+        showToast('Módulo común creado');
+      }
+      overlay.remove();
+      renderSubmodulos();
+    } catch (err) { showToast(err.message || 'Error', 'error'); }
+  });
+}
+
+// Modal para crear/editar unidad
+function openUnidadModal(unidad, submoduloId, defaultOrden = 1) {
+  const isEdit = !!unidad;
+  const formHTML = `
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Número de Unidad</label>
+        <input type="number" class="form-input" id="unidad-orden" value="${isEdit ? (unidad.orden || 1) : defaultOrden}" required min="1" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nombre de la Unidad</label>
+        <input type="text" class="form-input" id="unidad-nombre" value="${isEdit ? sanitize(unidad.nombre) : `Unidad ${defaultOrden}`}" required placeholder="Ej: Unidad 1 - Introducción" />
+      </div>
+    </div>
+  `;
+
+  const footerHTML = `
+    <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+    <button class="btn btn-primary" id="modal-save">${isEdit ? 'Guardar' : 'Agregar Unidad'}</button>
+  `;
+
+  const overlay = createModal(isEdit ? 'Editar Unidad' : 'Nueva Unidad', formHTML, footerHTML);
+
+  overlay.querySelector('#modal-cancel').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#modal-save').addEventListener('click', async () => {
+    const nombre = document.getElementById('unidad-nombre').value.trim();
+    const orden = parseInt(document.getElementById('unidad-orden').value) || 1;
+
+    if (!nombre) { showToast('Ingresá el nombre de la unidad', 'error'); return; }
+
+    try {
+      if (isEdit) {
+        await update('unidades', unidad.id, { nombre, orden });
+        showToast('Unidad actualizada');
+      } else {
+        await create('unidades', { nombre, orden, submodulo_id: submoduloId });
+        showToast('Unidad agregada');
+      }
+      overlay.remove();
+      renderSubmodulos();
+    } catch (err) { showToast(err.message || 'Error', 'error'); }
+  });
+}
+
+export default { renderSubmodulos };
