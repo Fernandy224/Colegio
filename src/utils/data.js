@@ -24,7 +24,11 @@ const DEMO_DATA = {
         { id: generateId(), nombre: 'Roberto', apellido: 'Morales', dni: '27456789', email: 'rmorales@edu.ar', especialidad: 'Base de Datos' },
         { id: generateId(), nombre: 'Laura', apellido: 'Acosta', dni: '31567890', email: 'lacosta@edu.ar', especialidad: 'Matemática' },
     ],
-    trayectos_formativos: [],
+    trayectos_formativos: [
+        { id: generateId(), nombre: 'Desarrollo Web', descripcion: 'Trayecto intensivo Full Stack', profesor_id: null, duracion: '6 meses' },
+        { id: generateId(), nombre: 'Cocina', descripcion: 'Trayecto de cocina profesional', profesor_id: null, duracion: '1 año' },
+        { id: generateId(), nombre: 'Telar', descripcion: 'Técnicas de tejido en telar', profesor_id: null, duracion: '3 meses' }
+    ],
     modulos: [],
     submodulos: [],
     unidades: [],

@@ -61,7 +61,13 @@ async function renderTrayectosList() {
                 </div>
                 <div style="min-width: 0;">
                   <div class="card-name" style="text-align: left;">${sanitize(tray.nombre)}</div>
-                  <div class="card-subtitle" style="text-align: left; margin-top: 2px;">${prof ? `Prof. ${sanitize(prof.nombre)} ${sanitize(prof.apellido)}` : 'Sin profesor'}</div>
+                  <div class="card-subtitle" style="text-align: left; margin-top: 2px;">
+                    ${prof ? `Prof. ${sanitize(prof.nombre)} ${sanitize(prof.apellido)}` : 'Sin profesor'}
+                  </div>
+                  <div style="font-size:0.75rem; color:var(--text-muted); margin-top: 4px; display:flex; align-items:center; gap: 4px;">
+                    <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    ${tray.duracion ? sanitize(tray.duracion) : 'Duración sin definir'}
+                  </div>
                 </div>
               </div>
               <div class="card-details" style="margin-top: auto;">
@@ -194,7 +200,10 @@ async function renderTrayectoDetail(trayectoId) {
           <h1 class="section-title">${sanitize(trayecto.nombre)}</h1>
           <p style="font-size: 0.8125rem; color: var(--text-secondary); margin-top: 2px;">
             ${prof ? `Prof. ${sanitize(prof.nombre)} ${sanitize(prof.apellido)}` : 'Sin profesor asignado'}
-            ${trayecto.descripcion ? ` · ${sanitize(trayecto.descripcion)}` : ''}
+            <span style="margin: 0 4px;">·</span>
+            <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" style="vertical-align: middle; margin-top: -2px;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            ${trayecto.duracion ? sanitize(trayecto.duracion) : 'Duración sin definir'}
+            ${trayecto.descripcion ? `<span style="margin: 0 4px;">·</span>${sanitize(trayecto.descripcion)}` : ''}
           </p>
         </div>
       </div>
@@ -556,16 +565,22 @@ function openTrayectoModal(trayecto, profesores) {
       <label class="form-label">Nombre del Trayecto</label>
       <input type="text" class="form-input" id="tray-nombre" value="${isEdit ? sanitize(trayecto.nombre) : ''}" required placeholder="Ej: Desarrollo de Software" />
     </div>
-    <div class="form-group">
-      <label class="form-label">Profesor Responsable</label>
-      <select class="form-select" id="tray-profesor">
-        <option value="">Sin asignar</option>
-        ${profesores.map(p => `
-          <option value="${p.id}" ${isEdit && trayecto.profesor_id === p.id ? 'selected' : ''}>
-            ${sanitize(p.nombre)} ${sanitize(p.apellido)} - ${sanitize(p.especialidad || '')}
-          </option>
-        `).join('')}
-      </select>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Profesor Responsable</label>
+        <select class="form-select" id="tray-profesor">
+          <option value="">Sin asignar</option>
+          ${profesores.map(p => `
+            <option value="${p.id}" ${isEdit && trayecto.profesor_id === p.id ? 'selected' : ''}>
+              ${sanitize(p.nombre)} ${sanitize(p.apellido)} - ${sanitize(p.especialidad || '')}
+            </option>
+          `).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Duración (ej: "3 meses", "1 año")</label>
+        <input type="text" class="form-input" id="tray-duracion" value="${isEdit ? sanitize(trayecto.duracion || '') : ''}" placeholder="Ej: 6 meses" />
+      </div>
     </div>
     <div class="form-group">
       <label class="form-label">Descripción</label>
@@ -581,11 +596,12 @@ function openTrayectoModal(trayecto, profesores) {
   overlay.querySelector('#modal-save').addEventListener('click', async () => {
     const nombre = document.getElementById('tray-nombre').value.trim();
     const profesor_id = document.getElementById('tray-profesor').value || null;
+    const duracion = document.getElementById('tray-duracion').value.trim() || null;
     const descripcion = document.getElementById('tray-desc').value.trim();
     if (!nombre) { showToast('Ingresá el nombre', 'error'); return; }
     try {
-      if (isEdit) { await update('trayectos_formativos', trayecto.id, { nombre, profesor_id, descripcion }); showToast('Trayecto actualizado'); }
-      else { await create('trayectos_formativos', { nombre, profesor_id, descripcion }); showToast('Trayecto creado'); }
+      if (isEdit) { await update('trayectos_formativos', trayecto.id, { nombre, profesor_id, duracion, descripcion }); showToast('Trayecto actualizado'); }
+      else { await create('trayectos_formativos', { nombre, profesor_id, duracion, descripcion }); showToast('Trayecto creado'); }
       overlay.remove();
       renderTrayectos();
     } catch (err) { showToast(err.message || 'Error', 'error'); }

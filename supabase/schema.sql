@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS trayectos_formativos (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   nombre VARCHAR(200) NOT NULL,
   descripcion TEXT,
+  duracion VARCHAR(100),
   profesor_id UUID REFERENCES profesores(id) ON DELETE SET NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
