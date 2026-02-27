@@ -89,25 +89,8 @@ export function renderAuth() {
     <div class="auth-page">
       <div class="auth-card">
         <div class="auth-logo">
-          <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect width="60" height="60" rx="16" fill="url(#logo-grad)"/>
-            <defs>
-              <linearGradient id="logo-grad" x1="0" y1="0" x2="60" y2="60" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stop-color="#7c3aed"/>
-                <stop offset="100%" stop-color="#4f46e5"/>
-              </linearGradient>
-            </defs>
-            <!-- Libro / diploma -->
-            <rect x="14" y="18" width="22" height="26" rx="3" fill="white" fill-opacity="0.15"/>
-            <rect x="16" y="20" width="18" height="22" rx="2" fill="white" fill-opacity="0.9"/>
-            <rect x="19" y="24" width="12" height="1.5" rx="1" fill="#7c3aed"/>
-            <rect x="19" y="27.5" width="9" height="1.5" rx="1" fill="#7c3aed" fill-opacity="0.6"/>
-            <rect x="19" y="31" width="11" height="1.5" rx="1" fill="#7c3aed" fill-opacity="0.6"/>
-            <rect x="19" y="34.5" width="7" height="1.5" rx="1" fill="#7c3aed" fill-opacity="0.4"/>
-            <!-- Check / aprobado -->
-            <circle cx="41" cy="38" r="9" fill="#10b981"/>
-            <path d="M36.5 38.5L39.5 41.5L45.5 35" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
+          <img src="/logo.png" alt="Seguimiento Integral de FP"
+            style="width:80px;height:80px;object-fit:cover;border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,0.3);" />
         </div>
 
         <h1 class="auth-title">Seguimiento Integral de FP</h1>
