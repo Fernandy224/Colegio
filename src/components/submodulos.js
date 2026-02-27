@@ -14,6 +14,7 @@ export async function renderSubmodulos() {
   const submodulos = await fetchAll('submodulos');
   const modulos = await fetchAll('modulos');
   const unidades = await fetchAll('unidades');
+  const profesores = await fetchAll('profesores');
 
   content.innerHTML = `
     <div class="section-header">
@@ -53,6 +54,7 @@ export async function renderSubmodulos() {
                 <div>
                   <div class="card-name" style="text-align: left;">${sanitize(sub.nombre)}</div>
                   <div class="card-subtitle" style="text-align: left; margin-top: 2px;">Mód. Específico: ${mod ? sanitize(mod.nombre) : 'Sin módulo'}</div>
+                  ${(() => { const prof = profesores.find(p => p.id === sub.profesor_id); return prof ? `<div style="font-size:0.7rem;color:var(--accent-purple-light);margin-top:2px;">Prof. a cargo: ${sanitize(prof.nombre)} ${sanitize(prof.apellido || '')}</div>` : '<div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">Sin profesor asignado</div>'; })()} 
                 </div>
               </div>
 
@@ -189,14 +191,14 @@ export async function renderSubmodulos() {
   // === Eventos ===
 
   // Agregar módulo común
-  document.getElementById('btn-add-submodulo')?.addEventListener('click', () => openSubmoduloModal(null, modulos));
+  document.getElementById('btn-add-submodulo')?.addEventListener('click', () => openSubmoduloModal(null, modulos, profesores));
 
   // Editar módulo común
   content.querySelectorAll('.edit-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const sub = submodulos.find(s => s.id === btn.dataset.id);
-      if (sub) openSubmoduloModal(sub, modulos);
+      if (sub) openSubmoduloModal(sub, modulos, profesores);
     });
   });
 
@@ -256,8 +258,7 @@ export async function renderSubmodulos() {
   });
 }
 
-// Modal para crear/editar módulo común
-function openSubmoduloModal(submodulo, modulos) {
+function openSubmoduloModal(submodulo, modulos, profesores = []) {
   const isEdit = !!submodulo;
   const formHTML = `
     <div class="form-group">
@@ -265,7 +266,22 @@ function openSubmoduloModal(submodulo, modulos) {
       <input type="text" class="form-input" id="sub-nombre" value="${isEdit ? sanitize(submodulo.nombre) : ''}" required placeholder="Ej: Comunicación" />
     </div>
     <div class="form-group">
-      <label class="form-label">Módulo Específico Asociado</label>
+      <label class="form-label">Profesor a Cargo</label>
+      <select class="form-select" id="sub-profesor">
+        <option value="">Sin profesor asignado</option>
+        ${profesores.map(p => `
+          <option value="${p.id}" ${isEdit && submodulo.profesor_id === p.id ? 'selected' : ''}>
+            ${sanitize(p.nombre)} ${sanitize(p.apellido || '')}
+            ${p.auth_id ? ' ✔' : ' (sin cuenta)'}
+          </option>
+        `).join('')}
+      </select>
+      <p style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">
+        Solo este profesor podrá cargar y modificar notas de este módulo en todos los trayectos.
+      </p>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Módulo Específico Asociado <span style="color:var(--text-muted);font-size:0.75rem;">(opcional)</span></label>
       <select class="form-select" id="sub-modulo">
         <option value="">Seleccionar módulo específico...</option>
         ${modulos.map(m => `
@@ -286,21 +302,21 @@ function openSubmoduloModal(submodulo, modulos) {
   overlay.querySelector('#modal-save').addEventListener('click', async () => {
     const nombre = document.getElementById('sub-nombre').value.trim();
     const modulo_id = document.getElementById('sub-modulo').value || null;
+    const profesor_id = document.getElementById('sub-profesor').value || null;
 
     if (!nombre) { showToast('Ingresá el nombre del módulo común', 'error'); return; }
-    if (!modulo_id) { showToast('Seleccioná un módulo específico', 'error'); return; }
 
     try {
       if (isEdit) {
-        await update('submodulos', submodulo.id, { nombre, modulo_id });
+        await update('submodulos', submodulo.id, { nombre, modulo_id, profesor_id });
         showToast('Módulo común actualizado');
       } else {
-        await create('submodulos', { nombre, modulo_id });
+        await create('submodulos', { nombre, modulo_id, profesor_id });
         showToast('Módulo común creado');
       }
       overlay.remove();
       renderSubmodulos();
-    } catch (err) { showToast(err.message || 'Error', 'error'); }
+    } catch (err) { showToast(err.message || 'Error al guardar. Verificá tu sesión.', 'error'); }
   });
 }
 

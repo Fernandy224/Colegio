@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS profesores (
   dni VARCHAR(20) UNIQUE NOT NULL,
   email VARCHAR(150),
   especialidad VARCHAR(150),
+  auth_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -124,9 +125,51 @@ CREATE TABLE IF NOT EXISTS trayecto_modulo_comun (
 CREATE TABLE IF NOT EXISTS perfiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   nombre VARCHAR(200),
-  rol VARCHAR(50) DEFAULT 'administrativo' CHECK (rol IN ('administrador', 'administrativo', 'docente')),
+  rol VARCHAR(50) DEFAULT 'profesor' CHECK (rol IN ('administrador', 'profesor')),
+  activo BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Función para verificar si un usuario es admin activo
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+DECLARE
+    v_rol VARCHAR;
+    v_activo BOOLEAN;
+BEGIN
+    SELECT rol, activo INTO v_rol, v_activo FROM public.perfiles WHERE id = auth.uid();
+    RETURN COALESCE(v_rol = 'administrador' AND v_activo = true, FALSE);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger para editar o borrar último administrador
+CREATE OR REPLACE FUNCTION check_last_admin()
+RETURNS TRIGGER AS $$
+DECLARE
+    admin_count INT;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        SELECT COUNT(*) INTO admin_count FROM perfiles WHERE rol = 'administrador' AND activo = true AND id != OLD.id;
+        IF admin_count = 0 AND OLD.rol = 'administrador' AND OLD.activo = true THEN
+            RAISE EXCEPTION 'No se puede eliminar el último administrador activo del sistema.';
+        END IF;
+        RETURN OLD;
+    ELSIF TG_OP = 'UPDATE' THEN
+        IF OLD.rol = 'administrador' AND OLD.activo = true AND (NEW.rol != 'administrador' OR NEW.activo = false) THEN
+            SELECT COUNT(*) INTO admin_count FROM perfiles WHERE rol = 'administrador' AND activo = true AND id != OLD.id;
+            IF admin_count = 0 THEN
+                RAISE EXCEPTION 'No se puede desactivar o quitar el rol al último administrador activo del sistema.';
+            END IF;
+        END IF;
+        RETURN NEW;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS prevent_last_admin_removal ON perfiles;
+CREATE TRIGGER prevent_last_admin_removal
+BEFORE UPDATE OR DELETE ON perfiles
+FOR EACH ROW EXECUTE FUNCTION check_last_admin();
 
 -- ============================================
 -- ÍNDICES
@@ -160,31 +203,34 @@ CREATE POLICY "Lectura autenticados" ON submodulos FOR SELECT TO authenticated U
 CREATE POLICY "Lectura autenticados" ON aprobaciones FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Lectura autenticados" ON unidades FOR SELECT TO authenticated USING (true);
 
--- Permitir escritura solo a administradores
+-- Permitir escritura solo a administradores usando is_admin()
 CREATE POLICY "Escritura admin" ON estudiantes FOR ALL TO authenticated
-  USING (EXISTS (SELECT 1 FROM perfiles WHERE id = auth.uid() AND rol = 'administrador'))
-  WITH CHECK (EXISTS (SELECT 1 FROM perfiles WHERE id = auth.uid() AND rol = 'administrador'));
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
 CREATE POLICY "Escritura admin" ON profesores FOR ALL TO authenticated
-  USING (EXISTS (SELECT 1 FROM perfiles WHERE id = auth.uid() AND rol = 'administrador'))
-  WITH CHECK (EXISTS (SELECT 1 FROM perfiles WHERE id = auth.uid() AND rol = 'administrador'));
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
 CREATE POLICY "Escritura admin" ON trayectos_formativos FOR ALL TO authenticated
-  USING (EXISTS (SELECT 1 FROM perfiles WHERE id = auth.uid() AND rol = 'administrador'))
-  WITH CHECK (EXISTS (SELECT 1 FROM perfiles WHERE id = auth.uid() AND rol = 'administrador'));
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
 CREATE POLICY "Escritura admin" ON modulos FOR ALL TO authenticated
-  USING (EXISTS (SELECT 1 FROM perfiles WHERE id = auth.uid() AND rol = 'administrador'))
-  WITH CHECK (EXISTS (SELECT 1 FROM perfiles WHERE id = auth.uid() AND rol = 'administrador'));
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
 CREATE POLICY "Escritura admin" ON submodulos FOR ALL TO authenticated
-  USING (EXISTS (SELECT 1 FROM perfiles WHERE id = auth.uid() AND rol = 'administrador'))
-  WITH CHECK (EXISTS (SELECT 1 FROM perfiles WHERE id = auth.uid() AND rol = 'administrador'));
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
 CREATE POLICY "Escritura admin" ON aprobaciones FOR ALL TO authenticated
-  USING (EXISTS (SELECT 1 FROM perfiles WHERE id = auth.uid() AND rol = 'administrador'))
-  WITH CHECK (EXISTS (SELECT 1 FROM perfiles WHERE id = auth.uid() AND rol = 'administrador'));
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
--- Perfil propio
-CREATE POLICY "Ver perfil propio" ON perfiles FOR SELECT TO authenticated
-  USING (id = auth.uid());
+-- Perfil propio y admin
+CREATE POLICY "Lectura perfiles" ON perfiles FOR SELECT TO authenticated
+  USING (id = auth.uid() OR public.is_admin());
+
+CREATE POLICY "Actualizar perfiles" ON perfiles FOR UPDATE TO authenticated
+  USING (public.is_admin());

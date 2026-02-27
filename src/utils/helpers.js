@@ -101,11 +101,11 @@ export function showToast(message, type = 'success') {
 }
 
 // Crear modal
-export function createModal(title, contentHTML, footerHTML = '') {
+export function createModal(title, contentHTML, footerHTML = '', maxWidth = '480px') {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
-    <div class="modal">
+    <div class="modal" style="max-width:${maxWidth};">
       <div class="modal-header">
         <h3 class="modal-title">${title}</h3>
         <button class="modal-close" id="modal-close-btn">${icons.close}</button>
@@ -114,6 +114,7 @@ export function createModal(title, contentHTML, footerHTML = '') {
       ${footerHTML ? `<div class="modal-footer">${footerHTML}</div>` : ''}
     </div>
   `;
+
 
     document.body.appendChild(overlay);
 

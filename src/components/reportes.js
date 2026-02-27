@@ -13,6 +13,9 @@ export async function renderReportes() {
   const modulos = await fetchAll('modulos');
   const aprobaciones = await fetchAll('aprobaciones');
   const submodulos = await fetchAll('submodulos');
+  const trayectos = await fetchAll('trayectos_formativos');
+  const inscripciones = await fetchAll('inscripciones');
+  const seguimiento = await fetchAll('seguimiento_modulos');
 
   // Años únicos
   const anios = [...new Set(estudiantes.map(e => e.anio_ingreso))].sort((a, b) => b - a);
@@ -22,7 +25,14 @@ export async function renderReportes() {
       <h1 class="section-title">Reportes y Consultas</h1>
     </div>
 
-    <div class="report-filters">
+    <!-- Tabs para Reportes -->
+    <div class="content-tabs" style="margin-bottom: 24px;">
+      <button class="content-tab active" data-tab="general">Reporte General</button>
+      <button class="content-tab" data-tab="egresados">Egresados por Trayecto</button>
+    </div>
+
+    <div id="tab-general" class="report-tab-content">
+      <div class="report-filters">
       <div class="report-filter-group">
         <span class="report-filter-label">Buscar estudiante</span>
         <div class="search-bar" style="max-width:none;">
@@ -79,6 +89,50 @@ export async function renderReportes() {
         </table>
       </div>
     </div>
+    </div> <!-- tab-general -->
+
+    <div id="tab-egresados" class="report-tab-content" style="display: none;">
+      <div class="report-filters">
+        <div class="report-filter-group">
+          <span class="report-filter-label">Buscar estudiante</span>
+          <div class="search-bar" style="max-width:none;">
+            ${icons.search}
+            <input type="text" id="report-egr-search" placeholder="Nombre, apellido o DNI..." />
+          </div>
+        </div>
+        <div class="report-filter-group">
+          <span class="report-filter-label">Trayecto Formativo</span>
+          <select class="form-select" id="report-egr-trayecto">
+            <option value="">Todos</option>
+            ${trayectos.map(t => `<option value="${t.id}">${sanitize(t.nombre)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="report-filter-group" style="justify-content: flex-end;">
+          <button class="btn btn-primary" id="report-egr-apply" style="margin-top: auto;">
+            ${icons.search} Buscar
+          </button>
+        </div>
+      </div>
+
+      <div id="report-egr-results">
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Estudiante</th>
+                <th>DNI</th>
+                <th>Trayecto Formativo</th>
+                <th>Año Finalización</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="report-egr-tbody">
+              ${renderEgresadosRows(estudiantes, inscripciones, trayectos, seguimiento)}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div> <!-- tab-egresados -->
   `;
 
   // Panel
@@ -114,15 +168,115 @@ export async function renderReportes() {
     </div>
   `;
 
-  // Filtrar
+  // Tabs events
+  content.querySelectorAll('.content-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      content.querySelectorAll('.content-tab').forEach(t => t.classList.remove('active'));
+      content.querySelectorAll('.report-tab-content').forEach(c => c.style.display = 'none');
+
+      tab.classList.add('active');
+      const tabId = tab.dataset.tab;
+      document.getElementById(`tab-${tabId}`).style.display = 'block';
+    });
+  });
+
+  // Filtrar General
   document.getElementById('report-apply')?.addEventListener('click', () => {
     applyFilters(estudiantes, aprobaciones, modulos, submodulos);
   });
-
-  // También filtrar al escribir
   document.getElementById('report-search')?.addEventListener('input', () => {
     applyFilters(estudiantes, aprobaciones, modulos, submodulos);
   });
+
+  // Filtrar Egresados
+  document.getElementById('report-egr-apply')?.addEventListener('click', () => {
+    applyEgresadosFilters(estudiantes, inscripciones, trayectos, seguimiento);
+  });
+  document.getElementById('report-egr-search')?.addEventListener('input', () => {
+    applyEgresadosFilters(estudiantes, inscripciones, trayectos, seguimiento);
+  });
+}
+
+function applyEgresadosFilters(estudiantes, inscripciones, trayectos, seguimiento) {
+  const searchVal = (document.getElementById('report-egr-search')?.value || '').toLowerCase();
+  const trayectoVal = document.getElementById('report-egr-trayecto')?.value;
+
+  let filteredEstudiantes = [...estudiantes];
+
+  if (searchVal) {
+    filteredEstudiantes = filteredEstudiantes.filter(e =>
+      `${e.nombre} ${e.apellido} ${e.dni}`.toLowerCase().includes(searchVal)
+    );
+  }
+
+  const tbody = document.getElementById('report-egr-tbody');
+  if (tbody) {
+    tbody.innerHTML = renderEgresadosRows(filteredEstudiantes, inscripciones, trayectos, seguimiento, trayectoVal);
+  }
+}
+
+function renderEgresadosRows(estudiantes, inscripciones, trayectos, seguimiento, trayectoFilter = '') {
+  // Filtrar solo inscripciones completas/finalizadas
+  let completas = inscripciones.filter(i => i.estado === 'Completo' || i.estado === 'Finalizado');
+
+  if (trayectoFilter) {
+    completas = completas.filter(i => i.trayecto_id === trayectoFilter);
+  }
+
+  // Mapear a formato de fila
+  const rowsData = [];
+
+  completas.forEach(insc => {
+    const est = estudiantes.find(e => e.id === insc.estudiante_id);
+    const tray = trayectos.find(t => t.id === insc.trayecto_id);
+
+    if (est && tray) {
+      // Determinar año de finalización buscando la fecha de aprobación más reciente
+      const segs = seguimiento.filter(s => s.inscripcion_id === insc.id && s.fecha_aprobacion);
+      let anioFin = est.anio_ingreso; // fallback
+
+      if (segs.length > 0) {
+        // Ordenar por fecha descendente
+        segs.sort((a, b) => new Date(b.fecha_aprobacion) - new Date(a.fecha_aprobacion));
+        const lastDate = new Date(segs[0].fecha_aprobacion);
+        if (!isNaN(lastDate.getFullYear())) {
+          anioFin = lastDate.getFullYear();
+        }
+      }
+
+      rowsData.push({
+        estudiante: est,
+        trayecto: tray,
+        anio: anioFin,
+        estado: insc.estado
+      });
+    }
+  });
+
+  if (rowsData.length === 0) {
+    return '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 32px;">No se encontraron egresados con los filtros actuales</td></tr>';
+  }
+
+  // Ordenar por año desc, luego por trayecto, luego por apellido
+  rowsData.sort((a, b) => {
+    if (b.anio !== a.anio) return b.anio - a.anio;
+    const trayCmp = a.trayecto.nombre.localeCompare(b.trayecto.nombre);
+    if (trayCmp !== 0) return trayCmp;
+    return a.estudiante.apellido.localeCompare(b.estudiante.apellido);
+  });
+
+  return rowsData.map(data => {
+    const estadoClass = data.estado === 'Finalizado' ? 'badge-active' : 'badge-approved';
+    return `
+      <tr>
+        <td><strong>${sanitize(data.estudiante.nombre)} ${sanitize(data.estudiante.apellido)}</strong></td>
+        <td>${sanitize(data.estudiante.dni)}</td>
+        <td>${sanitize(data.trayecto.nombre)}</td>
+        <td>${data.anio}</td>
+        <td><span class="badge ${estadoClass}">${data.estado}</span></td>
+      </tr>
+    `;
+  }).join('');
 }
 
 function applyFilters(allEstudiantes, allAprobaciones, modulos, submodulos) {
@@ -136,7 +290,7 @@ function applyFilters(allEstudiantes, allAprobaciones, modulos, submodulos) {
   // Filtrar por texto
   if (searchVal) {
     filtered = filtered.filter(e =>
-      `${e.nombre} ${e.apellido} ${e.dni}`.toLowerCase().includes(searchVal)
+      `${e.nombre} ${e.apellido} ${e.dni} `.toLowerCase().includes(searchVal)
     );
   }
 

@@ -1,0 +1,21 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno (¡NUNCA subir al repo!)
+.env
+.env.local
+.env.*.local
+
+# Build de Vite
+dist/
+
+# Editor
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Logs
+*.log
+npm-debug.log*

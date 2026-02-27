@@ -1,5 +1,5 @@
 /* ============================================
-   SISTEMA DE GESTIÓN ESTUDIANTIL
+   SEGUIMIENTO INTEGRAL DE FP
    Design System - Dark Theme Premium
    ============================================ */
 
@@ -90,7 +90,9 @@
 }
 
 /* Reset */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -161,6 +163,13 @@ a {
 
 .sidebar-logo:hover {
   transform: scale(1.08);
+}
+
+.logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-md);
 }
 
 .sidebar-nav {
@@ -1271,6 +1280,25 @@ a {
   text-decoration: underline;
 }
 
+.btn-google {
+  background: #fff;
+  color: #1f1f1f;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  font-weight: 600;
+  font-size: var(--font-sm);
+  padding: 11px 20px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  font-family: var(--font-family);
+}
+
+.btn-google:hover {
+  background: #f5f5f5;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+}
+
 /* ============================================
    DASHBOARD
    ============================================ */
@@ -1314,11 +1342,25 @@ a {
   color: white;
 }
 
-.stat-card-icon.purple { background: var(--gradient-purple); }
-.stat-card-icon.blue { background: var(--gradient-blue); }
-.stat-card-icon.green { background: linear-gradient(135deg, #059669, #34d399); }
-.stat-card-icon.orange { background: linear-gradient(135deg, #d97706, #fbbf24); }
-.stat-card-icon.pink { background: linear-gradient(135deg, #db2777, #f472b6); }
+.stat-card-icon.purple {
+  background: var(--gradient-purple);
+}
+
+.stat-card-icon.blue {
+  background: var(--gradient-blue);
+}
+
+.stat-card-icon.green {
+  background: linear-gradient(135deg, #059669, #34d399);
+}
+
+.stat-card-icon.orange {
+  background: linear-gradient(135deg, #d97706, #fbbf24);
+}
+
+.stat-card-icon.pink {
+  background: linear-gradient(135deg, #db2777, #f472b6);
+}
 
 .stat-card-value {
   font-size: var(--font-2xl);
@@ -1364,10 +1406,21 @@ a {
   flex-shrink: 0;
 }
 
-.activity-dot.green { background: var(--accent-green); }
-.activity-dot.blue { background: var(--accent-blue); }
-.activity-dot.purple { background: var(--accent-purple); }
-.activity-dot.orange { background: var(--accent-orange); }
+.activity-dot.green {
+  background: var(--accent-green);
+}
+
+.activity-dot.blue {
+  background: var(--accent-blue);
+}
+
+.activity-dot.purple {
+  background: var(--accent-purple);
+}
+
+.activity-dot.orange {
+  background: var(--accent-orange);
+}
 
 .activity-text {
   flex: 1;
@@ -1492,45 +1545,114 @@ a {
    ============================================ */
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slideDown {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slideIn {
-  from { opacity: 0; transform: translateX(50px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(50px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.6;
+  }
 }
 
 @keyframes cardAppear {
-  from { opacity: 0; transform: translateY(15px) scale(0.97); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(15px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
-.card { animation: cardAppear 0.4s ease backwards; }
-.card:nth-child(1) { animation-delay: 0.05s; }
-.card:nth-child(2) { animation-delay: 0.1s; }
-.card:nth-child(3) { animation-delay: 0.15s; }
-.card:nth-child(4) { animation-delay: 0.2s; }
-.card:nth-child(5) { animation-delay: 0.25s; }
-.card:nth-child(6) { animation-delay: 0.3s; }
-.card:nth-child(7) { animation-delay: 0.35s; }
-.card:nth-child(8) { animation-delay: 0.4s; }
-.card:nth-child(9) { animation-delay: 0.45s; }
+.card {
+  animation: cardAppear 0.4s ease backwards;
+}
+
+.card:nth-child(1) {
+  animation-delay: 0.05s;
+}
+
+.card:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.card:nth-child(3) {
+  animation-delay: 0.15s;
+}
+
+.card:nth-child(4) {
+  animation-delay: 0.2s;
+}
+
+.card:nth-child(5) {
+  animation-delay: 0.25s;
+}
+
+.card:nth-child(6) {
+  animation-delay: 0.3s;
+}
+
+.card:nth-child(7) {
+  animation-delay: 0.35s;
+}
+
+.card:nth-child(8) {
+  animation-delay: 0.4s;
+}
+
+.card:nth-child(9) {
+  animation-delay: 0.45s;
+}
 
 /* ============================================
    RESPONSIVE

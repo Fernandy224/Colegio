@@ -5,6 +5,7 @@
 import { getContentArea, getPanelRight } from './layout.js';
 import { icons, showToast, createModal, confirmDialog, sanitize, formatDate, getInitials, stringToColor } from '../utils/helpers.js';
 import { fetchAll, create, update, remove } from '../utils/data.js';
+import { getCurrentUser } from './auth.js';
 
 let currentView = 'list'; // 'list' | 'detail'
 let selectedTrayectoId = null;
@@ -155,6 +156,13 @@ async function renderTrayectoDetail(trayectoId) {
   const profesores = await fetchAll('profesores');
   const prof = profesores.find(p => p.id === trayecto.profesor_id);
 
+  // Profesores asignados a este trayecto (para RLS del profesor)
+  const asignaciones = await fetchAll('asignaciones_profesor');
+  const asignacionesTray = asignaciones.filter(a => a.trayecto_id === trayectoId);
+  const profesoresAsignados = asignacionesTray
+    .map(a => profesores.find(p => p.id === a.profesor_id))
+    .filter(Boolean);
+
   const allEstudiantes = await fetchAll('estudiantes');
   const inscripciones = await fetchAll('inscripciones');
   const thisInscripciones = inscripciones.filter(i => i.trayecto_id === trayectoId);
@@ -176,6 +184,12 @@ async function renderTrayectoDetail(trayectoId) {
     ...modulosTray.map(m => ({ ...m, tipo: 'Específico', refId: m.id, refField: 'modulo_id' })),
     ...modulosComunes.map(s => ({ ...s, tipo: 'Común', refId: s.id, refField: 'submodulo_id' })),
   ];
+
+  // Identificar el id del profesor actual (para restricciones de módulos comunes)
+  const authUser = getCurrentUser();
+  const currentProfesorId = authUser?.role === 'profesor'
+    ? profesores.find(p => p.auth_id === authUser.id)?.id || null
+    : null; // null = admin = sin restricciones
 
   // Estudiantes inscriptos
   const inscriptoData = thisInscripciones.map(insc => {
@@ -209,9 +223,12 @@ async function renderTrayectoDetail(trayectoId) {
       </div>
       <div class="section-actions">
         <button class="btn btn-secondary" id="btn-vincular-comun">${icons.plus} Vincular Mód. Común</button>
+        <button class="btn btn-secondary" id="btn-asignar-profesor">${icons.professors} Asignar Profesor</button>
+        <button class="btn btn-secondary" id="btn-importar-csv">📥 Importar CSV</button>
         <button class="btn btn-add" id="btn-inscribir">${icons.plus} Inscribir Estudiante</button>
       </div>
     </div>
+
 
     <!-- Tabs -->
     <div class="content-tabs">
@@ -272,6 +289,31 @@ async function renderTrayectoDetail(trayectoId) {
       </div>
     </div>
     <div class="widget">
+      <div class="widget-header">
+        <span class="widget-title">Profesores Asignados</span>
+      </div>
+      ${profesoresAsignados.length === 0
+      ? '<p style="font-size:0.8125rem;color:var(--text-muted);">Sin profesores asignados</p>'
+      : profesoresAsignados.map(p => `
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:30px;height:30px;border-radius:50%;background:var(--gradient-primary);display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;color:white;flex-shrink:0;">
+                ${(p.nombre || '?').charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <div style="font-size:0.8125rem;font-weight:600;">${sanitize(p.nombre)} ${sanitize(p.apellido || '')}</div>
+                ${p.especialidad ? `<div style="font-size:0.7rem;color:var(--text-muted);">${sanitize(p.especialidad)}</div>` : ''}
+              </div>
+            </div>
+            <button class="card-action-btn delete" title="Desvincular"
+              onclick="window.desvincularProfesor('${asignacionesTray.find(a => a.profesor_id === p.id)?.id}')" style="opacity:1;">
+              ${icons.trash}
+            </button>
+          </div>
+        `).join('')
+    }
+    </div>
+    <div class="widget">
       <div class="widget-header"><span class="widget-title">Módulos del Trayecto</span></div>
       ${allModulosTray.length === 0 ? '<p style="font-size:0.8125rem;color:var(--text-muted);">Sin módulos asignados</p>' :
       allModulosTray.map(m => `
@@ -285,7 +327,7 @@ async function renderTrayectoDetail(trayectoId) {
     <div class="widget widget-gradient">
       <div class="widget-header"><span class="widget-title">💡 Tip</span></div>
       <p style="font-size:0.8125rem;color:var(--text-secondary);line-height:1.5;">
-        Los módulos comunes aprobados en un trayecto se conservan si el estudiante se inscribe en otro trayecto.
+        Asigná profesores para que puedan acceder a este trayecto y sus estudiantes desde su cuenta.
       </p>
     </div>
   `;
@@ -306,7 +348,7 @@ async function renderTrayectoDetail(trayectoId) {
       const tabContent = document.getElementById('tab-content');
       if (tabId === 'seguimiento') {
         tabContent.innerHTML = renderSeguimientoTab(inscriptoData, allModulosTray, seguimiento);
-        bindSeguimientoEvents(inscriptoData, allModulosTray, unidades);
+        bindSeguimientoEvents(inscriptoData, allModulosTray, unidades, currentProfesorId);
       } else if (tabId === 'comparativa') {
         tabContent.innerHTML = renderComparativaTab(inscriptoData, allModulosTray, seguimiento);
       } else if (tabId === 'historial') {
@@ -320,12 +362,33 @@ async function renderTrayectoDetail(trayectoId) {
     openInscripcionModal(noInscriptos, trayectoId);
   });
 
+  // Importar estudiantes desde CSV
+  document.getElementById('btn-importar-csv')?.addEventListener('click', () => {
+    openImportarCSVModal(trayectoId, trayecto.nombre);
+  });
+
   // Vincular módulo común
   document.getElementById('btn-vincular-comun')?.addEventListener('click', () => {
     openVincularComunModal(trayectoId, submodulos, comunLinks);
   });
 
-  bindSeguimientoEvents(inscriptoData, allModulosTray, unidades);
+  // Asignar Profesor al trayecto
+  document.getElementById('btn-asignar-profesor')?.addEventListener('click', () => {
+    openAsignarProfesorModal(trayectoId, profesores, asignacionesTray);
+  });
+
+  // Desvincular profesor (global)
+  window.desvincularProfesor = async (asignacionId) => {
+    if (!asignacionId) return;
+    if (!confirm('¿Desvincular este profesor del trayecto?')) return;
+    try {
+      await remove('asignaciones_profesor', asignacionId);
+      showToast('Profesor desvinculado');
+      renderTrayectoDetail(trayectoId);
+    } catch (err) { showToast('Error: ' + err.message, 'error'); }
+  };
+
+  bindSeguimientoEvents(inscriptoData, allModulosTray, unidades, currentProfesorId);
 }
 
 // ============================================
@@ -388,12 +451,12 @@ function renderSeguimientoTab(inscriptoData, allModulosTray, seguimiento) {
   `;
 }
 
-function bindSeguimientoEvents(inscriptoData, allModulosTray, unidades) {
+function bindSeguimientoEvents(inscriptoData, allModulosTray, unidades, currentProfesorId = null) {
   // Ver seguimiento detallado por estudiante
   document.querySelectorAll('.seg-detail-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const data = inscriptoData.find(d => d.id === btn.dataset.inscid);
-      if (data) openSeguimientoDetalleModal(data, allModulosTray, unidades);
+      if (data) openSeguimientoDetalleModal(data, allModulosTray, unidades, currentProfesorId);
     });
   });
 
@@ -687,7 +750,57 @@ function openVincularComunModal(trayectoId, allSubmodulos, existingLinks) {
   });
 }
 
-function openSeguimientoDetalleModal(inscripcionData, allModulosTray, unidades) {
+// ============================================
+// MODAL: ASIGNAR PROFESOR AL TRAYECTO
+// ============================================
+function openAsignarProfesorModal(trayectoId, profesores, asignacionesExistentes) {
+  const yaAsignadosIds = asignacionesExistentes.map(a => a.profesor_id);
+  const disponibles = profesores.filter(p => !yaAsignadosIds.includes(p.id));
+
+  if (disponibles.length === 0) {
+    showToast('Todos los profesores ya están asignados a este trayecto', 'error');
+    return;
+  }
+
+  const formHTML = `
+    <div class="form-group">
+      <label class="form-label">Seleccioná un Profesor</label>
+      <select class="form-select" id="asign-profesor">
+        <option value="">Elegir profesor...</option>
+        ${disponibles.map(p => `
+          <option value="${p.id}">
+            ${sanitize(p.nombre)} ${sanitize(p.apellido || '')}
+            ${p.especialidad ? ' — ' + sanitize(p.especialidad) : ''}
+            ${p.auth_id ? ' ✓' : ' (sin cuenta)'}
+          </option>
+        `).join('')}
+      </select>
+      <p style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">
+        ✓ = tiene cuenta de usuario. Los demás pueden ser asignados pero no podrán acceder por cuenta propia.
+      </p>
+    </div>
+  `;
+  const footerHTML = `
+    <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+    <button class="btn btn-primary" id="modal-save">Asignar Profesor</button>
+  `;
+  const overlay = createModal('Asignar Profesor al Trayecto', formHTML, footerHTML);
+  overlay.querySelector('#modal-cancel').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#modal-save').addEventListener('click', async () => {
+    const profesor_id = document.getElementById('asign-profesor').value;
+    if (!profesor_id) { showToast('Seleccioná un profesor', 'error'); return; }
+    try {
+      await create('asignaciones_profesor', { profesor_id, trayecto_id: trayectoId });
+      showToast('Profesor asignado al trayecto ✓');
+      overlay.remove();
+      renderTrayectoDetail(trayectoId);
+    } catch (err) { showToast(err.message || 'Error al asignar', 'error'); }
+  });
+}
+
+function openSeguimientoDetalleModal(inscripcionData, allModulosTray, unidades, currentProfesorId = null) {
+  // currentProfesorId: id del profesor en tabla 'profesores'. null = admin (sin restricciones).
+  // Un módulo común es readonly si currentProfesorId != null Y módulo.profesor_id != currentProfesorId
   const est = inscripcionData.estudiante;
   if (!est) return;
 
@@ -743,38 +856,78 @@ function openSeguimientoDetalleModal(inscripcionData, allModulosTray, unidades) 
       }
     }
 
+    // Determinar si este módulo es readonly para el profesor actual
+    const isReadonly = currentProfesorId !== null && m.tipo !== 'Específico' &&
+      (m.profesor_id ? m.profesor_id !== currentProfesorId : true);
+    // isReadonly = true cuando:
+    // - Hay un profesor logueado (currentProfesorId != null)
+    // - El módulo es Común
+    // - Y el profesor_id del módulo es distinto del profesor actual (o no tiene asignado)
+
     return `
-          <div style="padding:12px;border:1px solid var(--border-color);border-radius:8px;margin-bottom:12px;background:var(--bg-input);">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-              <span class="mod-tipo ${m.tipo === 'Específico' ? 'especifico' : 'comun'}">${m.tipo}</span>
-              <strong style="font-size:0.95rem;">${sanitize(m.nombre)}</strong>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-              <div class="form-group" style="gap:4px;">
-                <label class="form-label" style="font-size:0.7rem;">Estado General</label>
-                <select class="form-select status-select seg-estado" data-ref-field="${m.refField}" data-ref-id="${m.refId}" data-seg-id="${seg?.id || ''}">
-                  <option value="Pendiente" ${estado === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
-                  <option value="En curso" ${estado === 'En curso' ? 'selected' : ''}>En curso</option>
-                  <option value="Aprobado" ${estado === 'Aprobado' ? 'selected' : ''}>Aprobado</option>
-                  <option value="Desaprobado" ${estado === 'Desaprobado' ? 'selected' : ''}>Desaprobado</option>
-                </select>
+          <div style="padding:14px;border:1px solid ${isReadonly ? 'rgba(139,92,246,0.2)' : 'var(--border-color)'};border-radius:10px;margin-bottom:12px;background:var(--bg-input);">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="mod-tipo ${m.tipo === 'Espec\u00edfico' ? 'especifico' : 'comun'}">${m.tipo}</span>
+                <strong style="font-size:0.95rem;">${sanitize(m.nombre)}</strong>
               </div>
+              ${isReadonly ? '<span style="font-size:0.7rem;color:var(--accent-purple-light);background:rgba(139,92,246,0.1);padding:3px 8px;border-radius:20px;">\uD83D\uDD12 Solo el prof. a cargo puede editar</span>' : ''}
+            </div>
+
+            ${isReadonly
+        ? `<div style="padding:8px 12px;background:rgba(255,255,255,0.04);border-radius:8px;font-size:0.875rem;color:var(--text-secondary);">Estado: <strong>${estado}</strong>${nota ? ` · Nota: <strong>${nota}</strong>` : ''}</div>`
+        : `
+            <!-- Botones de estado visibles -->
+            <div style="margin-bottom:10px;">
+              <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);font-weight:600;margin-bottom:6px;">Estado del módulo</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                ${[
+          { val: 'Pendiente', color: 'rgba(255,255,255,0.06)', border: 'rgba(255,255,255,0.1)', active: 'rgba(255,255,255,0.12)', label: '⏸ Pendiente' },
+          { val: 'En curso', color: 'rgba(59,130,246,0.08)', border: 'rgba(59,130,246,0.25)', active: 'rgba(59,130,246,0.25)', label: '▶ En curso' },
+          { val: 'Aprobado', color: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.3)', active: 'rgba(16,185,129,0.3)', label: '✓ Aprobar' },
+          { val: 'Desaprobado', color: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.3)', active: 'rgba(239,68,68,0.3)', label: '✗ Desaprobar' },
+        ].map(opt => `
+                  <button type="button"
+                    class="estado-pill-btn"
+                    data-target-select="seg-estado-${m.refId}"
+                    data-value="${opt.val}"
+                    style="
+                      padding:6px 14px;border-radius:20px;font-size:0.8rem;font-weight:600;cursor:pointer;transition:all 0.15s;border:1.5px solid ${opt.border};
+                      background:${estado === opt.val ? opt.active : opt.color};
+                      color:${estado === opt.val ? 'var(--text-primary)' : 'var(--text-secondary)'};
+                      ${estado === opt.val ? 'box-shadow:0 0 0 2px ' + opt.border + ';' : ''}
+                    "
+                  >${opt.label}</button>
+                `).join('')}
+              </div>
+            </div>
+            <!-- Select oculto (lo usa el save handler) -->
+            <select class="seg-estado" id="seg-estado-${m.refId}" data-ref-field="${m.refField}" data-ref-id="${m.refId}" data-seg-id="${seg?.id || ''}" style="display:none;">
+              <option value="Pendiente" ${estado === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
+              <option value="En curso" ${estado === 'En curso' ? 'selected' : ''}>En curso</option>
+              <option value="Aprobado" ${estado === 'Aprobado' ? 'selected' : ''}>Aprobado</option>
+              <option value="Desaprobado" ${estado === 'Desaprobado' ? 'selected' : ''}>Desaprobado</option>
+            </select>
+            <!-- Nota, fecha, docente -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;">
               <div class="form-group" style="gap:4px;">
-                <label class="form-label" style="font-size:0.7rem;">Nota General</label>
+                <label class="form-label" style="font-size:0.7rem;">Nota (1-10)</label>
                 <input type="number" class="form-input seg-nota" data-ref-id="${m.refId}" value="${nota}" min="1" max="10" step="0.5" placeholder="-" style="padding:6px 10px;font-size:0.8rem;" />
               </div>
               <div class="form-group" style="gap:4px;">
-                <label class="form-label" style="font-size:0.7rem;">Fecha aprobación</label>
+                <label class="form-label" style="font-size:0.7rem;">Fecha aprobaci\u00f3n</label>
                 <input type="date" class="form-input seg-fecha" data-ref-id="${m.refId}" value="${fecha}" style="padding:6px 10px;font-size:0.8rem;" />
               </div>
               <div class="form-group" style="gap:4px;">
                 <label class="form-label" style="font-size:0.7rem;">Docente evaluador</label>
-                <input type="text" class="form-input seg-docente" data-ref-id="${m.refId}" value="${sanitize(docente)}" placeholder="Opcional" style="padding:6px 10px;font-size:0.8rem;" />
+                <input type="text" class="form-input seg-docente" data-ref-id="${m.refId}" value="${sanitize(docente)}" placeholder="Nombre" style="padding:6px 10px;font-size:0.8rem;" />
               </div>
-            </div>
+            </div>`
+      }
             ${unidadesHTML}
-          </div >
+          </div>
     `;
+
   }).join('')}
     </div>
   `;
@@ -785,7 +938,35 @@ function openSeguimientoDetalleModal(inscripcionData, allModulosTray, unidades) 
   `;
 
   const overlay = createModal('Seguimiento Académico', formHTML, footerHTML);
+
+  // Conectar los botones de estado (pills) con el select oculto
+  overlay.querySelectorAll('.estado-pill-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const selectId = btn.dataset.targetSelect;
+      const value = btn.dataset.value;
+      const select = overlay.querySelector('#' + selectId);
+      if (select) select.value = value;
+
+      // Actualizar estilos visuales del grupo de botones
+      const siblings = overlay.querySelectorAll(`[data-target-select="${selectId}"]`);
+      siblings.forEach(b => {
+        const isActive = b.dataset.value === value;
+        const colors = {
+          'Pendiente': { border: 'rgba(255,255,255,0.1)', active: 'rgba(255,255,255,0.12)' },
+          'En curso': { border: 'rgba(59,130,246,0.25)', active: 'rgba(59,130,246,0.25)' },
+          'Aprobado': { border: 'rgba(16,185,129,0.3)', active: 'rgba(16,185,129,0.3)' },
+          'Desaprobado': { border: 'rgba(239,68,68,0.3)', active: 'rgba(239,68,68,0.3)' },
+        };
+        const c = colors[b.dataset.value] || colors['Pendiente'];
+        b.style.background = isActive ? c.active : 'rgba(255,255,255,0.03)';
+        b.style.color = isActive ? 'var(--text-primary)' : 'var(--text-secondary)';
+        b.style.boxShadow = isActive ? `0 0 0 2px ${c.border}` : 'none';
+      });
+    });
+  });
+
   overlay.querySelector('#modal-cancel').addEventListener('click', () => overlay.remove());
+
   overlay.querySelector('#modal-save').addEventListener('click', async () => {
     try {
       const selects = overlay.querySelectorAll('.seg-estado');
@@ -881,6 +1062,210 @@ function openCambiarEstadoModal(inscripcionData) {
       renderTrayectos();
     } catch (err) { showToast(err.message || 'Error', 'error'); }
   });
+}
+
+
+// ============================================
+// IMPORTAR ESTUDIANTES DESDE CSV
+// ============================================
+function openImportarCSVModal(trayectoId, trayectoNombre) {
+  const formHTML = `
+    <div style="margin-bottom:16px;padding:12px;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:10px;">
+      <p style="font-size:0.875rem;font-weight:600;margin-bottom:4px;">Formato del archivo CSV</p>
+      <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:8px;">
+        El archivo debe tener una fila de encabezado con estas columnas (en cualquier orden):
+      </p>
+      <code style="font-size:0.75rem;color:var(--accent-purple-light);background:rgba(0,0,0,0.3);padding:6px 10px;border-radius:6px;display:block;margin-bottom:8px;">
+        dni, nombre, apellido, email, anio_ingreso
+      </code>
+      <p style="font-size:0.75rem;color:var(--text-muted);">
+        ✦ Solo <strong>DNI, nombre y apellido</strong> son obligatorios.<br/>
+        ✦ Si el estudiante ya existe (por DNI), se inscribe al trayecto sin duplicar.<br/>
+        ✦ Si ya estaba inscripto, se omite sin error.
+      </p>
+      <button id="btn-descargar-plantilla" class="btn btn-secondary" style="margin-top:8px;font-size:0.78rem;padding:6px 12px;">
+        📄 Descargar plantilla CSV
+      </button>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Seleccionar archivo CSV</label>
+      <input type="file" id="csv-file-input" accept=".csv,text/csv" class="form-input" style="padding:8px;" />
+    </div>
+
+    <div id="csv-preview" style="display:none;margin-top:12px;">
+      <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);font-weight:600;margin-bottom:8px;">
+        Vista previa — <span id="csv-row-count">0</span> estudiante(s) detectado(s)
+      </div>
+      <div id="csv-preview-table" style="max-height:200px;overflow-y:auto;border:1px solid var(--border-color);border-radius:8px;"></div>
+    </div>
+
+    <div id="csv-error-msg" style="display:none;margin-top:10px;padding:8px 12px;background:rgba(239,68,68,0.1);color:#ef4444;border-radius:8px;font-size:0.8rem;"></div>
+  `;
+
+  const footerHTML = `
+    <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+    <button class="btn btn-primary" id="btn-ejecutar-import" disabled>📥 Importar estudiantes</button>
+  `;
+
+  const overlay = createModal(`Importar Estudiantes — ${sanitize(trayectoNombre)}`, formHTML, footerHTML, '580px');
+  overlay.querySelector('#modal-cancel').addEventListener('click', () => overlay.remove());
+
+  // Plantilla descargable
+  overlay.querySelector('#btn-descargar-plantilla').addEventListener('click', () => {
+    const csv = 'dni,nombre,apellido,email,anio_ingreso\n12345678,Juan,García,juan@email.com,2024\n87654321,María,López,,2023';
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'plantilla_estudiantes.csv';
+    a.click();
+  });
+
+  // Parsear CSV al seleccionar archivo
+  let parsedRows = [];
+  overlay.querySelector('#csv-file-input').addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target.result;
+      const errorEl = overlay.querySelector('#csv-error-msg');
+      errorEl.style.display = 'none';
+
+      try {
+        parsedRows = parseCSV(text);
+        if (parsedRows.length === 0) throw new Error('El archivo no contiene filas válidas.');
+
+        // Validar columnas mínimas
+        const first = parsedRows[0];
+        if (!first.dni || !first.nombre || !first.apellido) {
+          throw new Error("Faltan columnas requeridas: 'dni', 'nombre', 'apellido'.");
+        }
+
+        overlay.querySelector('#csv-row-count').textContent = parsedRows.length;
+        overlay.querySelector('#csv-preview-table').innerHTML = `
+          <table style="width:100%;font-size:0.78rem;border-collapse:collapse;">
+            <thead>
+              <tr style="background:var(--bg-secondary);">
+                <th style="padding:6px 8px;text-align:left;font-weight:600;color:var(--text-muted);">DNI</th>
+                <th style="padding:6px 8px;text-align:left;font-weight:600;color:var(--text-muted);">Nombre</th>
+                <th style="padding:6px 8px;text-align:left;font-weight:600;color:var(--text-muted);">Apellido</th>
+                <th style="padding:6px 8px;text-align:left;font-weight:600;color:var(--text-muted);">Email</th>
+                <th style="padding:6px 8px;text-align:left;font-weight:600;color:var(--text-muted);">Año</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${parsedRows.slice(0, 10).map((r, i) => `
+                <tr style="border-top:1px solid var(--border-color);background:${i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)'};">
+                  <td style="padding:5px 8px;">${sanitize(r.dni)}</td>
+                  <td style="padding:5px 8px;">${sanitize(r.nombre)}</td>
+                  <td style="padding:5px 8px;">${sanitize(r.apellido)}</td>
+                  <td style="padding:5px 8px;color:var(--text-muted);">${sanitize(r.email || '-')}</td>
+                  <td style="padding:5px 8px;color:var(--text-muted);">${sanitize(r.anio_ingreso || '-')}</td>
+                </tr>
+              `).join('')}
+              ${parsedRows.length > 10 ? `<tr><td colspan="5" style="padding:6px 8px;color:var(--text-muted);text-align:center;">... y ${parsedRows.length - 10} más</td></tr>` : ''}
+            </tbody>
+          </table>
+        `;
+        overlay.querySelector('#csv-preview').style.display = 'block';
+        overlay.querySelector('#btn-ejecutar-import').disabled = false;
+
+      } catch (err) {
+        parsedRows = [];
+        overlay.querySelector('#csv-preview').style.display = 'none';
+        overlay.querySelector('#btn-ejecutar-import').disabled = true;
+        errorEl.textContent = '⚠ ' + err.message;
+        errorEl.style.display = 'block';
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  });
+
+  // Ejecutar importación
+  overlay.querySelector('#btn-ejecutar-import').addEventListener('click', async () => {
+    if (parsedRows.length === 0) return;
+    const btn = overlay.querySelector('#btn-ejecutar-import');
+    btn.disabled = true;
+    btn.textContent = 'Importando...';
+
+    let creados = 0, inscriptos = 0, yaExistian = 0, yaInscriptos = 0, errores = 0;
+
+    // Cargar datos existentes
+    const [estudiantesExistentes, inscripcionesExistentes] = await Promise.all([
+      fetchAll('estudiantes'),
+      fetchAll('inscripciones'),
+    ]);
+
+    for (const row of parsedRows) {
+      try {
+        const dniLimpio = String(row.dni).trim();
+        let estudiante = estudiantesExistentes.find(e => String(e.dni) === dniLimpio);
+
+        if (!estudiante) {
+          // Crear nuevo estudiante
+          estudiante = await create('estudiantes', {
+            dni: dniLimpio,
+            nombre: row.nombre.trim(),
+            apellido: row.apellido.trim(),
+            email: row.email?.trim() || null,
+            anio_ingreso: row.anio_ingreso ? parseInt(row.anio_ingreso) : new Date().getFullYear(),
+          });
+          creados++;
+        } else {
+          yaExistian++;
+        }
+
+        // Verificar si ya está inscripto en este trayecto
+        const yaInscripto = inscripcionesExistentes.some(
+          i => i.estudiante_id === estudiante.id && i.trayecto_id === trayectoId
+        );
+
+        if (!yaInscripto) {
+          await create('inscripciones', {
+            estudiante_id: estudiante.id,
+            trayecto_id: trayectoId,
+            estado: 'Activo',
+          });
+          inscriptos++;
+        } else {
+          yaInscriptos++;
+        }
+      } catch (err) {
+        console.error('Error al importar fila:', row, err);
+        errores++;
+      }
+    }
+
+    // Mostrar resultado
+    showToast(
+      `✅ Importación completa: ${creados} creados, ${inscriptos} inscriptos` +
+      (yaExistian > 0 ? `, ${yaExistian} ya existían` : '') +
+      (yaInscriptos > 0 ? `, ${yaInscriptos} ya inscriptos` : '') +
+      (errores > 0 ? `, ⚠ ${errores} errores` : ''),
+      errores > 0 ? 'warning' : 'success'
+    );
+    overlay.remove();
+    renderTrayectos();
+  });
+}
+
+// Helper: parsear CSV en array de objetos usando la primera fila como keys
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+  if (lines.length < 2) return [];
+
+  // Detectar separador (coma o punto y coma)
+  const sep = lines[0].includes(';') ? ';' : ',';
+  const headers = lines[0].split(sep).map(h => h.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z_]/g, ''));
+
+  return lines.slice(1).map(line => {
+    const values = line.split(sep).map(v => v.trim().replace(/^["']|["']$/g, ''));
+    const obj = {};
+    headers.forEach((h, i) => { if (h) obj[h] = values[i] || ''; });
+    return obj;
+  }).filter(r => r.dni || r.nombre); // Descartar filas completamente vacías
 }
 
 export default { renderTrayectos };
