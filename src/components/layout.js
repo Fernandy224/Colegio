@@ -30,7 +30,7 @@ export function renderLayout() {
     <div class="app-layout">
       <!-- Sidebar -->
       <aside class="sidebar">
-        <div class="sidebar-logo"><img src="/logo.png" alt="Logo" class="logo-img" /></div>
+        <div class="sidebar-logo"><img src="/logo.png" alt="Logo Nucleamiento N°6" width="60" /></div>
         <nav class="sidebar-nav">
           ${allowedNavItems.map(item => `
             <button class="sidebar-item ${current === item.id ? 'active' : ''}" data-route="${item.id}" title="${item.label}">

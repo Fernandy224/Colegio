@@ -89,8 +89,7 @@ export function renderAuth() {
     <div class="auth-page">
       <div class="auth-card">
         <div class="auth-logo">
-          <img src="/logo.png" alt="Seguimiento Integral de FP"
-            style="width:80px;height:80px;object-fit:cover;border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,0.3);" />
+          <img src="/logo.png" alt="Logo Nucleamiento N°6" width="120" />
         </div>
 
         <h1 class="auth-title">Seguimiento Integral de FP</h1>
