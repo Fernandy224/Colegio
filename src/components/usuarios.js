@@ -120,6 +120,12 @@ function renderUsuariosList(list) {
             onclick="window.toggleActivo('${u.id}', ${!u.activo})">
             ${u.activo ? 'Desactivar' : 'Activar'}
           </button>
+          <button class="btn" style="padding:6px 12px;font-size:12px;
+            background:rgba(239,68,68,0.1);color:var(--accent-red);
+            border:1px solid rgba(239,68,68,0.2);"
+            onclick="window.eliminarUsuario('${u.id}', '${(u.nombre || u.email || '').replace(/'/g, '')}')">
+            🗑 Eliminar
+          </button>
         ` : '<span style="font-size:12px;color:var(--text-muted);padding:6px;">Tu cuenta</span>'}
       </div>
     </div>
@@ -381,6 +387,36 @@ window.resetearPassword = async (userId, nombreUsuario) => {
         modal.querySelector('#btn-copiar-pass').textContent = '✓ Copiada';
       });
     });
+
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  }
+};
+
+window.eliminarUsuario = async (userId, nombreUsuario) => {
+  if (!confirm(`¿Estás seguro de que querés ELIMINAR permanentemente la cuenta de "${nombreUsuario}"?\n\nEsta acción no se puede deshacer.`)) return;
+
+  try {
+    const { data: { session } } = await getSupabase().auth.getSession();
+    if (!session) { showToast('Sesión expirada', 'error'); return; }
+
+    const resp = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ user_id: userId }),
+      }
+    );
+
+    const result = await resp.json();
+    if (!resp.ok) throw new Error(result.error || 'Error al eliminar');
+
+    showToast(`✅ Usuario "${nombreUsuario}" eliminado correctamente.`);
+    loadUsuarios();
 
   } catch (err) {
     showToast('Error: ' + err.message, 'error');
