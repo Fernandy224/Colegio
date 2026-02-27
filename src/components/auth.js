@@ -18,7 +18,11 @@ async function loadPerfil(userId) {
     .eq('id', userId)
     .single();
 
-  if (error) throw new Error('Error al cargar perfil de usuario.');
+  if (error) {
+    console.error('Error loadPerfil:', error);
+    throw new Error(`Error de perfil: ${error.message || 'No se pudo cargar'}. Verificá que la tabla 'perfiles' exista.`);
+  }
+
   if (!profile.activo) {
     await getSupabase().auth.signOut();
     throw new Error('Tu cuenta está inactiva. Contactá al administrador.');
@@ -134,11 +138,21 @@ export function renderAuth() {
     btn.disabled = true;
     btn.textContent = 'Ingresando...';
 
+    // Failsafe: Si en 10 segundos no hubo respuesta, resetear botón
+    const timeout = setTimeout(() => {
+      if (btn.textContent === 'Ingresando...') {
+        btn.disabled = false;
+        btn.textContent = 'Iniciar Sesión';
+        showToast('La conexión está tardando más de lo normal. Intentá de nuevo.', 'warning');
+      }
+    }, 10000);
+
     try {
       const { error } = await getSupabase().auth.signInWithPassword({ email, password });
       if (error) throw error;
       // onAuthStateChange maneja el resto
     } catch (err) {
+      clearTimeout(timeout);
       const msg = err.message?.includes('Invalid login')
         ? 'Email o contraseña incorrectos'
         : (err.message || 'Error al iniciar sesión');
