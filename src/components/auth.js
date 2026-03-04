@@ -116,7 +116,8 @@ export function initAuth() {
         setSupabaseSession(false);
         if (onAuthChange) onAuthChange(false);
       }
-    } else if (event === 'SIGNED_OUT') {
+    } else if (event === 'SIGNED_OUT' || event === 'INITIAL_SESSION') {
+      // INITIAL_SESSION sin sesión activa = usuario no logueado → mostrar login
       currentUser = null;
       setSupabaseSession(false);
       if (onAuthChange) onAuthChange(false);
