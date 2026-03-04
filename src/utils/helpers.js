@@ -52,9 +52,10 @@ export function stringToColor(str) {
     return colors[Math.abs(hash) % colors.length];
 }
 
-// Validar DNI (8 dígitos numéricos)
+// Validar DNI (7 u 8 dígitos numéricos, ignorando puntos o espacios)
 export function validarDNI(dni) {
-    return /^\d{7,8}$/.test(dni);
+    const cleanDni = (dni || '').toString().replace(/\D/g, '');
+    return cleanDni.length >= 7 && cleanDni.length <= 8;
 }
 
 // Formatear fecha

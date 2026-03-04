@@ -4,12 +4,15 @@
 import { getContentArea, getPanelRight } from './layout.js';
 import { icons, showToast, createModal, confirmDialog, sanitize } from '../utils/helpers.js';
 import { fetchAll, create, update, remove } from '../utils/data.js';
+import { getCurrentYear } from '../utils/state.js';
 
 export async function renderModulos() {
   const content = getContentArea();
   const panel = getPanelRight();
+  const year = getCurrentYear();
 
-  const modulos = await fetchAll('modulos');
+  let allModulos = await fetchAll('modulos');
+  let modulos = allModulos.filter(m => !m.anio || m.anio === year);
   const trayectos = await fetchAll('trayectos_formativos');
 
   // Agrupar modulos por trayecto_id
@@ -130,7 +133,7 @@ function openModuloModal(modulo, trayectos) {
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Año</label>
-        <input type="number" class="form-input" id="mod-anio" value="${isEdit ? (modulo.anio || '') : ''}" placeholder="2024" min="2000" max="2100" />
+        <input type="number" class="form-input" id="mod-anio" value="${isEdit ? (modulo.anio || '') : getCurrentYear()}" placeholder="2024" min="2000" max="2100" />
       </div>
       <div class="form-group">
         <label class="form-label">Trayecto Formativo</label>

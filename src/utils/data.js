@@ -8,11 +8,16 @@ import { getSupabase } from '../supabaseClient.js';
 // ============================================
 
 export async function fetchAll(table, options = {}) {
+    console.log(`[Data] Fetching all from ${table}...`);
     let query = getSupabase().from(table).select(options.select || '*');
     if (options.orderBy) query = query.order(options.orderBy, { ascending: options.ascending ?? false });
     else query = query.order('created_at', { ascending: false });
     const { data, error } = await query;
-    if (error) throw error;
+    if (error) {
+        console.error(`[Data] Error fetching ${table}:`, error);
+        throw error;
+    }
+    console.log(`[Data] Fetched ${data?.length || 0} rows from ${table}`);
     return data || [];
 }
 
@@ -30,9 +35,9 @@ export async function fetchByField(table, field, value, select = '*') {
 }
 
 export async function create(table, record) {
-    const { data, error } = await getSupabase().from(table).insert(record).select().single();
+    const { data, error } = await getSupabase().from(table).insert(record).select();
     if (error) throw error;
-    return data;
+    return data ? data[0] : null;
 }
 
 export async function update(table, id, changes) {
@@ -69,16 +74,24 @@ export async function checkDniExists(table, dni, excludeId = null) {
 }
 
 export async function countAll(table) {
+    console.log(`[Data] Counting all from ${table}...`);
     const { count, error } = await getSupabase()
         .from(table).select('*', { count: 'exact', head: true });
-    if (error) throw error;
+    if (error) {
+        console.error(`[Data] Error counting ${table}:`, error);
+        throw error;
+    }
     return count || 0;
 }
 
 export async function countByField(table, field, value) {
+    console.log(`[Data] Counting ${table} where ${field}=${value}...`);
     const { count, error } = await getSupabase()
         .from(table).select('*', { count: 'exact', head: true }).eq(field, value);
-    if (error) throw error;
+    if (error) {
+        console.error(`[Data] Error counting ${table} filtered:`, error);
+        throw error;
+    }
     return count || 0;
 }
 

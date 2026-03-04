@@ -173,7 +173,8 @@ function openProfesorModal(profesor = null) {
   overlay.querySelector('#modal-save').addEventListener('click', async () => {
     const nombre = document.getElementById('prof-nombre').value.trim();
     const apellido = document.getElementById('prof-apellido').value.trim();
-    const dni = document.getElementById('prof-dni').value.trim();
+    const rawDni = document.getElementById('prof-dni').value.trim();
+    const dni = rawDni.replace(/\D/g, ''); // Limpiar puntos, espacios, etc.
     const especialidad = document.getElementById('prof-especialidad').value.trim();
     const email = document.getElementById('prof-email').value.trim();
 

@@ -12,19 +12,54 @@ let onAuthChange = null;
 // Helper: cargar perfil desde Supabase
 // ============================================
 async function loadPerfil(userId) {
-  const { data: profile, error } = await getSupabase()
+  const supabase = getSupabase();
+
+  // Timeout de seguridad para la consulta de perfil (7 segundos)
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Tiempo de espera agotado al cargar perfil. Reintentá.')), 7000)
+  );
+
+  const fetchPromise = supabase
     .from('perfiles')
     .select('rol, activo, nombre, email, must_change_password')
     .eq('id', userId)
-    .single();
+    .maybeSingle();
+
+  const { data: profile, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
   if (error) {
     console.error('Error loadPerfil:', error);
-    throw new Error(`Error de perfil: ${error.message || 'No se pudo cargar'}. Verificá que la tabla 'perfiles' exista.`);
+    throw new Error(`Error de conexión al cargar perfil. Intentá recargar la página.`);
+  }
+
+  // Failsafe: Si el perfil no existe (ej: error en trigger durante registro OAuth)
+  if (!profile) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Usuario no encontrado');
+
+    const newProfile = {
+      id: user.id,
+      email: user.email,
+      nombre: user.user_metadata?.nombre || user.email.split('@')[0],
+      rol: 'profesor',
+      activo: true
+    };
+
+    const { data, error: insertError } = await supabase
+      .from('perfiles')
+      .insert(newProfile)
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Error creating profile failsafe:', insertError);
+      throw new Error('No se pudo crear tu perfil de usuario. Contactá al administrador.');
+    }
+    profile = data;
   }
 
   if (!profile.activo) {
-    await getSupabase().auth.signOut();
+    await supabase.auth.signOut();
     throw new Error('Tu cuenta está inactiva. Contactá al administrador.');
   }
   return profile;
@@ -52,7 +87,7 @@ export function initAuth() {
   supabase.auth.onAuthStateChange(async (event, session) => {
     console.log('Session event:', event, session?.user?.email);
 
-    if (event === 'SIGNED_IN' && session?.user) {
+    if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
       try {
         const profile = await loadPerfil(session.user.id);
         currentUser = {
@@ -71,7 +106,12 @@ export function initAuth() {
 
         if (onAuthChange) onAuthChange(true);
       } catch (err) {
+        console.error('Critical auth error:', err);
         showToast(err.message, 'error');
+
+        // Limpiar sesión corrupta para permitir login fresco
+        await supabase.auth.signOut();
+
         currentUser = null;
         setSupabaseSession(false);
         if (onAuthChange) onAuthChange(false);

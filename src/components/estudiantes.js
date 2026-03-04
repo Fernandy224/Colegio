@@ -4,21 +4,26 @@
 import { getContentArea, getPanelRight } from './layout.js';
 import { icons, getInitials, stringToColor, showToast, createModal, confirmDialog, sanitize, validarDNI, formatDate } from '../utils/helpers.js';
 import { fetchAll, create, update, remove, checkDniExists, searchMultipleFields, countByField } from '../utils/data.js';
+import { getCurrentYear } from '../utils/state.js';
 
 let searchTerm = '';
 
 export async function renderEstudiantes() {
-    const content = getContentArea();
-    const panel = getPanelRight();
+  const content = getContentArea();
+  const panel = getPanelRight();
+  const year = getCurrentYear();
 
-    let estudiantes = searchTerm
-        ? await searchMultipleFields('estudiantes', ['nombre', 'apellido', 'dni'], searchTerm)
-        : await fetchAll('estudiantes');
+  let allEstudiantes = searchTerm
+    ? await searchMultipleFields('estudiantes', ['nombre', 'apellido', 'dni'], searchTerm)
+    : await fetchAll('estudiantes');
 
-    const totalActivos = await countByField('estudiantes', 'estado', 'Activo');
-    const totalEgresados = await countByField('estudiantes', 'estado', 'Egresado');
+  // Filtrar por año lectivo (año de ingreso)
+  let estudiantes = allEstudiantes.filter(e => e.anio_ingreso === year);
 
-    content.innerHTML = `
+  const totalActivos = estudiantes.filter(e => e.estado === 'Activo').length;
+  const totalEgresados = estudiantes.filter(e => e.estado === 'Egresado').length;
+
+  content.innerHTML = `
     <div class="section-header">
       <h1 class="section-title">Gestionar Estudiantes</h1>
       <div class="section-actions">
@@ -67,8 +72,8 @@ export async function renderEstudiantes() {
     `}
   `;
 
-    // Panel derecho
-    panel.innerHTML = `
+  // Panel derecho
+  panel.innerHTML = `
     <div class="widget">
       <div class="widget-header">
         <span class="widget-title">Resumen Estudiantes</span>
@@ -97,47 +102,47 @@ export async function renderEstudiantes() {
     </div>
   `;
 
-    // Eventos
-    document.getElementById('search-estudiantes')?.addEventListener('input', (e) => {
-        searchTerm = e.target.value;
-        renderEstudiantes();
-    });
+  // Eventos
+  document.getElementById('search-estudiantes')?.addEventListener('input', (e) => {
+    searchTerm = e.target.value;
+    renderEstudiantes();
+  });
 
-    document.getElementById('btn-add-estudiante')?.addEventListener('click', () => {
-        openEstudianteModal();
-    });
+  document.getElementById('btn-add-estudiante')?.addEventListener('click', () => {
+    openEstudianteModal();
+  });
 
-    content.querySelectorAll('.edit-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const est = estudiantes.find(s => s.id === btn.dataset.id);
-            if (est) openEstudianteModal(est);
-        });
+  content.querySelectorAll('.edit-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const est = estudiantes.find(s => s.id === btn.dataset.id);
+      if (est) openEstudianteModal(est);
     });
+  });
 
-    content.querySelectorAll('.card-action-btn-del').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const est = estudiantes.find(s => s.id === btn.dataset.id);
-            if (est) {
-                confirmDialog(
-                    `¿Estás seguro de eliminar a <strong>${sanitize(est.nombre)} ${sanitize(est.apellido)}</strong>?`,
-                    async () => {
-                        await remove('estudiantes', est.id);
-                        showToast('Estudiante eliminado');
-                        renderEstudiantes();
-                    }
-                );
-            }
-        });
+  content.querySelectorAll('.card-action-btn-del').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const est = estudiantes.find(s => s.id === btn.dataset.id);
+      if (est) {
+        confirmDialog(
+          `¿Estás seguro de eliminar a <strong>${sanitize(est.nombre)} ${sanitize(est.apellido)}</strong>?`,
+          async () => {
+            await remove('estudiantes', est.id);
+            showToast('Estudiante eliminado');
+            renderEstudiantes();
+          }
+        );
+      }
     });
+  });
 }
 
 function openEstudianteModal(estudiante = null) {
-    const isEdit = !!estudiante;
-    const title = isEdit ? 'Editar Estudiante' : 'Nuevo Estudiante';
+  const isEdit = !!estudiante;
+  const title = isEdit ? 'Editar Estudiante' : 'Nuevo Estudiante';
 
-    const formHTML = `
+  const formHTML = `
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Nombre</label>
@@ -155,7 +160,7 @@ function openEstudianteModal(estudiante = null) {
       </div>
       <div class="form-group">
         <label class="form-label">Año de Ingreso</label>
-        <input type="number" class="form-input" id="est-anio" value="${isEdit ? estudiante.anio_ingreso : new Date().getFullYear()}" required min="2000" max="2100" />
+        <input type="number" class="form-input" id="est-anio" value="${isEdit ? estudiante.anio_ingreso : getCurrentYear()}" required min="2000" max="2100" />
       </div>
     </div>
     <div class="form-group">
@@ -168,52 +173,53 @@ function openEstudianteModal(estudiante = null) {
     </div>
   `;
 
-    const footerHTML = `
+  const footerHTML = `
     <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
     <button class="btn btn-primary" id="modal-save">${isEdit ? 'Guardar Cambios' : 'Crear Estudiante'}</button>
   `;
 
-    const overlay = createModal(title, formHTML, footerHTML);
+  const overlay = createModal(title, formHTML, footerHTML);
 
-    overlay.querySelector('#modal-cancel').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#modal-cancel').addEventListener('click', () => overlay.remove());
 
-    overlay.querySelector('#modal-save').addEventListener('click', async () => {
-        const nombre = document.getElementById('est-nombre').value.trim();
-        const apellido = document.getElementById('est-apellido').value.trim();
-        const dni = document.getElementById('est-dni').value.trim();
-        const anio_ingreso = parseInt(document.getElementById('est-anio').value);
-        const estado = document.getElementById('est-estado').value;
+  overlay.querySelector('#modal-save').addEventListener('click', async () => {
+    const nombre = document.getElementById('est-nombre').value.trim();
+    const apellido = document.getElementById('est-apellido').value.trim();
+    const rawDni = document.getElementById('est-dni').value.trim();
+    const dni = rawDni.replace(/\D/g, ''); // Limpiar puntos, espacios, etc.
+    const anio_ingreso = parseInt(document.getElementById('est-anio').value);
+    const estado = document.getElementById('est-estado').value;
 
-        if (!nombre || !apellido || !dni || !anio_ingreso) {
-            showToast('Completá todos los campos obligatorios', 'error');
-            return;
-        }
+    if (!nombre || !apellido || !dni || !anio_ingreso) {
+      showToast('Completá todos los campos obligatorios', 'error');
+      return;
+    }
 
-        if (!validarDNI(dni)) {
-            showToast('El DNI debe tener 7 u 8 dígitos numéricos', 'error');
-            return;
-        }
+    if (!validarDNI(dni)) {
+      showToast('El DNI debe tener 7 u 8 dígitos numéricos', 'error');
+      return;
+    }
 
-        const dniExists = await checkDniExists('estudiantes', dni, isEdit ? estudiante.id : null);
-        if (dniExists) {
-            showToast('Ya existe un estudiante con ese DNI', 'error');
-            return;
-        }
+    const dniExists = await checkDniExists('estudiantes', dni, isEdit ? estudiante.id : null);
+    if (dniExists) {
+      showToast('Ya existe un estudiante con ese DNI', 'error');
+      return;
+    }
 
-        try {
-            if (isEdit) {
-                await update('estudiantes', estudiante.id, { nombre, apellido, dni, anio_ingreso, estado });
-                showToast('Estudiante actualizado');
-            } else {
-                await create('estudiantes', { nombre, apellido, dni, anio_ingreso, estado });
-                showToast('Estudiante creado exitosamente');
-            }
-            overlay.remove();
-            renderEstudiantes();
-        } catch (err) {
-            showToast(err.message || 'Error al guardar', 'error');
-        }
-    });
+    try {
+      if (isEdit) {
+        await update('estudiantes', estudiante.id, { nombre, apellido, dni, anio_ingreso, estado });
+        showToast('Estudiante actualizado');
+      } else {
+        await create('estudiantes', { nombre, apellido, dni, anio_ingreso, estado });
+        showToast('Estudiante creado exitosamente');
+      }
+      overlay.remove();
+      renderEstudiantes();
+    } catch (err) {
+      showToast(err.message || 'Error al guardar', 'error');
+    }
+  });
 }
 
 export default { renderEstudiantes };

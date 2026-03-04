@@ -4,6 +4,7 @@
 import { icons, getInitials } from '../utils/helpers.js';
 import { navigate, getCurrentRoute, setOnRouteChange } from '../router.js';
 import { getCurrentUser, logout } from './auth.js';
+import { getCurrentYear, setCurrentYear } from '../utils/state.js';
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', roles: ['administrador', 'profesor'] },
@@ -59,6 +60,15 @@ export function renderLayout() {
           </div>
           <div class="navbar-spacer"></div>
           <div class="navbar-actions">
+            <!-- Selector de año lectivo -->
+            <div class="year-selector-wrapper">
+              <span style="font-size:0.7rem; color:var(--text-muted); font-weight:600; text-transform:uppercase; margin-right:8px;">Año Lectivo</span>
+              <select id="global-year-selector" class="year-select">
+                ${[2023, 2024, 2025, 2026, 2027].map(year => `
+                  <option value="${year}" ${parseInt(year) === getCurrentYear() ? 'selected' : ''}>${year}</option>
+                `).join('')}
+              </select>
+            </div>
             <button class="navbar-icon-btn" title="Buscar">${icons.search}</button>
             <button class="navbar-icon-btn" title="Filtros">${icons.filter}</button>
           </div>
@@ -73,6 +83,11 @@ export function renderLayout() {
             <!-- Widgets -->
           </div>
         </div>
+        
+        <!-- Footer -->
+        <footer class="app-footer">
+          <p>© 2026 <strong>Fernando Fredes</strong> – Todos los derechos reservados.</p>
+        </footer>
       </div>
     </div>
   `;
@@ -82,6 +97,13 @@ export function renderLayout() {
     btn.addEventListener('click', () => {
       navigate(btn.dataset.route);
     });
+  });
+
+  // Evento selector de año lectivo
+  app.querySelector('#global-year-selector')?.addEventListener('change', (e) => {
+    setCurrentYear(e.target.value);
+    // Forzar renderizado de la vista actual
+    navigate(getCurrentRoute() || 'dashboard');
   });
 
   // Menú de usuario (popover sobre el avatar)

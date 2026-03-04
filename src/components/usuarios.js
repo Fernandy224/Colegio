@@ -336,23 +336,16 @@ window.resetearPassword = async (userId, nombreUsuario) => {
     const { data: { session } } = await getSupabase().auth.getSession();
     if (!session) { showToast('Sesión expirada', 'error'); return; }
 
-    const resp = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-user-password`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ user_id: userId }),
-      }
-    );
+    const { data, error } = await getSupabase().functions.invoke('reset-user-password', {
+      body: { user_id: userId },
+      headers: { Authorization: `Bearer ${session.access_token}` }
+    });
 
-    const result = await resp.json();
-    if (!resp.ok) throw new Error(result.error || 'Error al resetear');
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
 
     // Mostrar la nueva contraseña al admin
-    const pass = result.nueva_password;
+    const pass = data.nueva_password;
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
     modal.innerHTML = `
@@ -400,20 +393,13 @@ window.eliminarUsuario = async (userId, nombreUsuario) => {
     const { data: { session } } = await getSupabase().auth.getSession();
     if (!session) { showToast('Sesión expirada', 'error'); return; }
 
-    const resp = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ user_id: userId }),
-      }
-    );
+    const { data, error } = await getSupabase().functions.invoke('delete-user', {
+      body: { user_id: userId },
+      headers: { Authorization: `Bearer ${session.access_token}` }
+    });
 
-    const result = await resp.json();
-    if (!resp.ok) throw new Error(result.error || 'Error al eliminar');
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
 
     showToast(`✅ Usuario "${nombreUsuario}" eliminado correctamente.`);
     loadUsuarios();

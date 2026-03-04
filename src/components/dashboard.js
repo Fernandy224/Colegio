@@ -3,19 +3,32 @@
 // ============================================
 import { getContentArea, getPanelRight } from './layout.js';
 import { icons } from '../utils/helpers.js';
-import { countAll, countByField, fetchAll } from '../utils/data.js';
+import { fetchAll } from '../utils/data.js';
+import { getCurrentYear } from '../utils/state.js';
 
 export async function renderDashboard() {
   const content = getContentArea();
   const panel = getPanelRight();
+  const year = getCurrentYear();
 
-  // Obtener estadísticas
-  const totalEstudiantes = await countAll('estudiantes');
-  const totalProfesores = await countAll('profesores');
-  const totalModulos = await countAll('modulos');
-  const totalAprobaciones = await countAll('aprobaciones');
-  const totalTrayectos = await countAll('trayectos_formativos');
-  const estudiantesActivos = await countByField('estudiantes', 'estado', 'Activo');
+  // Obtener datos para filtrar localmente (o podrías usar queries filtradas)
+  const allEstudiantes = await fetchAll('estudiantes');
+  const allModulos = await fetchAll('modulos');
+  const allAprobaciones = await fetchAll('aprobaciones');
+  const allTrayectos = await fetchAll('trayectos_formativos');
+  const allProfesores = await fetchAll('profesores');
+
+  // Filtrar por año lectivo
+  const estudiantesYear = allEstudiantes.filter(e => e.anio_ingreso === year);
+  const modulosYear = allModulos.filter(m => !m.anio || m.anio === year);
+  const trayectosYear = allTrayectos; // Los trayectos suelen ser globales o multianuales
+
+  const totalEstudiantes = estudiantesYear.length;
+  const totalProfesores = allProfesores.length;
+  const totalModulos = modulosYear.length;
+  const totalAprobaciones = allAprobaciones.length; // Podría filtrarse por fecha si fuera necesario
+  const totalTrayectos = allTrayectos.length;
+  const estudiantesActivos = estudiantesYear.filter(e => e.estado === 'Activo').length;
 
   content.innerHTML = `
     <div class="section-header">

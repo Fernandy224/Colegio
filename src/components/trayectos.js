@@ -22,8 +22,14 @@ export async function renderTrayectos() {
 // VISTA LISTADO DE TRAYECTOS
 // ============================================
 async function renderTrayectosList() {
+  console.log('[Trayectos] Rendering list view...');
   const content = getContentArea();
   const panel = getPanelRight();
+
+  if (!content || !panel) {
+    console.error('[Trayectos] Container not found for list view:', { content, panel });
+    return;
+  }
 
   const trayectos = await fetchAll('trayectos_formativos');
   const profesores = await fetchAll('profesores');
@@ -662,6 +668,9 @@ function openTrayectoModal(trayecto, profesores) {
     const duracion = document.getElementById('tray-duracion').value.trim() || null;
     const descripcion = document.getElementById('tray-desc').value.trim();
     if (!nombre) { showToast('Ingresá el nombre', 'error'); return; }
+
+    console.log('[Trayectos] Intentando guardar:', { isEdit, nombre, profesor_id, duracion, descripcion });
+
     try {
       if (isEdit) { await update('trayectos_formativos', trayecto.id, { nombre, profesor_id, duracion, descripcion }); showToast('Trayecto actualizado'); }
       else { await create('trayectos_formativos', { nombre, profesor_id, duracion, descripcion }); showToast('Trayecto creado'); }

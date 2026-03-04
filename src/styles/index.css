@@ -320,6 +320,33 @@ a {
   color: var(--text-primary);
 }
 
+/* Year Selector */
+.year-selector-wrapper {
+  display: flex;
+  align-items: center;
+  margin-right: var(--space-md);
+  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.year-select {
+  background: transparent;
+  border: none;
+  color: var(--accent-purple-light);
+  font-weight: 700;
+  font-size: var(--font-sm);
+  cursor: pointer;
+  outline: none;
+  padding: 0 4px;
+}
+
+.year-select option {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
 /* Content Area */
 .content-wrapper {
   flex: 1;
@@ -1640,6 +1667,33 @@ a {
 
 .card:nth-child(9) {
   animation-delay: 0.45s;
+}
+
+/* ============================================
+   FOOTER
+   ============================================ */
+
+.app-footer {
+  padding: var(--space-sm) var(--space-xl);
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  z-index: 50;
+}
+
+.app-footer p {
+  margin: 0;
+  letter-spacing: 0.3px;
+}
+
+.app-footer strong {
+  color: var(--accent-purple-light);
+  font-weight: 600;
 }
 
 /* ============================================

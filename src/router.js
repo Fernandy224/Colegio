@@ -39,8 +39,9 @@ function handleRoute() {
     }
 
     currentRoute = hash;
-
     const handler = routes[hash];
+    console.log(`[Router] Navigating to: ${hash}`, { hasHandler: !!handler });
+
     if (handler) {
         // Envolver en try-catch para prevenir content-area negro por errores silenciosos
         Promise.resolve(handler()).catch(err => {
