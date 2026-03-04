@@ -31,6 +31,8 @@ async function renderTrayectosList() {
     return;
   }
 
+  const authUser = getCurrentUser();
+  const isAdmin = authUser?.role === 'administrador';
   const trayectos = await fetchAll('trayectos_formativos');
   const profesores = await fetchAll('profesores');
   const inscripciones = await fetchAll('inscripciones');
@@ -56,11 +58,14 @@ async function renderTrayectosList() {
     const prof = profesores.find(p => p.id === tray.profesor_id);
     const inscriptos = inscripciones.filter(i => i.trayecto_id === tray.id);
     const modulosTray = modulos.filter(m => m.trayecto_id === tray.id);
+    const isOwner = isAdmin || !tray.created_by || tray.created_by === authUser?.id;
     return `
             <div class="card trayecto-card" data-id="${tray.id}" style="cursor: pointer; align-items: stretch;">
               <div class="card-actions">
-                <button class="card-action-btn edit-btn" data-id="${tray.id}" title="Editar">${icons.edit}</button>
-                <button class="card-action-btn delete card-action-btn-del" data-id="${tray.id}" title="Eliminar">${icons.trash}</button>
+                ${isOwner ? `
+                  <button class="card-action-btn edit-btn" data-id="${tray.id}" title="Editar">${icons.edit}</button>
+                  <button class="card-action-btn delete card-action-btn-del" data-id="${tray.id}" title="Eliminar">${icons.trash}</button>
+                ` : `<span style="font-size:0.6rem;padding:3px 7px;border-radius:999px;background:rgba(139,92,246,0.12);color:var(--text-muted);white-space:nowrap;">Solo lectura</span>`}
               </div>
               <div style="display: flex; align-items: center; gap: 12px;">
                 <div class="card-avatar trayecto" style="width: 52px; height: 52px; flex-shrink: 0;">
@@ -673,7 +678,11 @@ function openTrayectoModal(trayecto, profesores) {
 
     try {
       if (isEdit) { await update('trayectos_formativos', trayecto.id, { nombre, profesor_id, duracion, descripcion }); showToast('Trayecto actualizado'); }
-      else { await create('trayectos_formativos', { nombre, profesor_id, duracion, descripcion }); showToast('Trayecto creado'); }
+      else {
+        const authUser = getCurrentUser();
+        await create('trayectos_formativos', { nombre, profesor_id, duracion, descripcion, created_by: authUser?.id || null });
+        showToast('Trayecto creado');
+      }
       overlay.remove();
       renderTrayectos();
     } catch (err) { showToast(err.message || 'Error', 'error'); }

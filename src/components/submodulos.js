@@ -4,6 +4,7 @@
 import { getContentArea, getPanelRight } from './layout.js';
 import { icons, showToast, createModal, confirmDialog, sanitize } from '../utils/helpers.js';
 import { fetchAll, create, update, remove } from '../utils/data.js';
+import { getCurrentUser } from './auth.js';
 
 let expandedCard = null; // ID del módulo común expandido para ver unidades
 
@@ -15,6 +16,8 @@ export async function renderSubmodulos() {
   const modulos = await fetchAll('modulos');
   const unidades = await fetchAll('unidades');
   const profesores = await fetchAll('profesores');
+  const authUser = getCurrentUser();
+  const isAdmin = authUser?.role === 'administrador';
 
   content.innerHTML = `
     <div class="section-header">
@@ -44,8 +47,10 @@ export async function renderSubmodulos() {
     return `
             <div class="card" data-id="${sub.id}" style="align-items: stretch; cursor: default;">
               <div class="card-actions">
-                <button class="card-action-btn edit-btn" data-id="${sub.id}" title="Editar">${icons.edit}</button>
-                <button class="card-action-btn delete card-action-btn-del" data-id="${sub.id}" title="Eliminar">${icons.trash}</button>
+                ${(isAdmin || !sub.created_by || sub.created_by === authUser?.id) ? `
+                  <button class="card-action-btn edit-btn" data-id="${sub.id}" title="Editar">${icons.edit}</button>
+                  <button class="card-action-btn delete card-action-btn-del" data-id="${sub.id}" title="Eliminar">${icons.trash}</button>
+                ` : `<span style="font-size:0.6rem;padding:3px 7px;border-radius:999px;background:rgba(139,92,246,0.12);color:var(--text-muted);white-space:nowrap;">Solo lectura</span>`}
               </div>
               <div style="display: flex; align-items: center; gap: 12px;">
                 <div class="card-avatar submodulo" style="width: 48px; height: 48px; font-size: 1rem; flex-shrink: 0;">
@@ -311,7 +316,8 @@ function openSubmoduloModal(submodulo, modulos, profesores = []) {
         await update('submodulos', submodulo.id, { nombre, modulo_id, profesor_id });
         showToast('Módulo común actualizado');
       } else {
-        await create('submodulos', { nombre, modulo_id, profesor_id });
+        const authUser = getCurrentUser();
+        await create('submodulos', { nombre, modulo_id, profesor_id, created_by: authUser?.id || null });
         showToast('Módulo común creado');
       }
       overlay.remove();

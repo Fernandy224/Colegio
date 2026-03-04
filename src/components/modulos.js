@@ -4,12 +4,15 @@
 import { getContentArea, getPanelRight } from './layout.js';
 import { icons, showToast, createModal, confirmDialog, sanitize } from '../utils/helpers.js';
 import { fetchAll, create, update, remove } from '../utils/data.js';
+import { getCurrentUser } from './auth.js';
 import { getCurrentYear } from '../utils/state.js';
 
 export async function renderModulos() {
   const content = getContentArea();
   const panel = getPanelRight();
   const year = getCurrentYear();
+  const authUser = getCurrentUser();
+  const isAdmin = authUser?.role === 'administrador';
 
   let allModulos = await fetchAll('modulos');
   let modulos = allModulos.filter(m => !m.anio || m.anio === year);
@@ -58,11 +61,14 @@ export async function renderModulos() {
               </div>
               <div class="cards-grid">
                 ${mods.map(mod => {
+      const isOwner = isAdmin || !mod.created_by || mod.created_by === authUser?.id;
       return `
                     <div class="card" data-id="${mod.id}">
                       <div class="card-actions">
-                        <button class="card-action-btn edit-btn" data-id="${mod.id}" title="Editar">${icons.edit}</button>
-                        <button class="card-action-btn delete card-action-btn-del" data-id="${mod.id}" title="Eliminar">${icons.trash}</button>
+                        ${isOwner ? `
+                          <button class="card-action-btn edit-btn" data-id="${mod.id}" title="Editar">${icons.edit}</button>
+                          <button class="card-action-btn delete card-action-btn-del" data-id="${mod.id}" title="Eliminar">${icons.trash}</button>
+                        ` : `<span style="font-size:0.6rem;padding:3px 7px;border-radius:999px;background:rgba(139,92,246,0.12);color:var(--text-muted);white-space:nowrap;">Solo lectura</span>`}
                       </div>
                       <div class="card-avatar modulo">
                         ${sanitize(mod.nombre?.charAt(0) || 'M')}
@@ -167,7 +173,8 @@ function openModuloModal(modulo, trayectos) {
         await update('modulos', modulo.id, { nombre, anio, trayecto_id });
         showToast('Módulo específico actualizado');
       } else {
-        await create('modulos', { nombre, anio, trayecto_id });
+        const authUser = getCurrentUser();
+        await create('modulos', { nombre, anio, trayecto_id, created_by: authUser?.id || null });
         showToast('Módulo específico creado');
       }
       overlay.remove();
