@@ -634,6 +634,12 @@ function renderHistorialTab(inscriptoData, allModulosTray, seguimiento, trayecto
 
 function openTrayectoModal(trayecto, profesores) {
   const isEdit = !!trayecto;
+  const authUser = getCurrentUser();
+  const isAdmin = authUser?.role === 'administrador';
+  // Buscar el prof. que corresponde al usuario logueado (por auth_id)
+  const myProfesor = profesores.find(p => p.auth_id === authUser?.id);
+  // Al crear: preseleccionar propio prof. Al editar: respetar el valor guardado
+  const selectedProfId = isEdit ? (trayecto.profesor_id || '') : (myProfesor?.id || '');
   const formHTML = `
     <div class="form-group">
       <label class="form-label">Nombre del Trayecto</label>
@@ -642,14 +648,20 @@ function openTrayectoModal(trayecto, profesores) {
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Profesor Responsable</label>
-        <select class="form-select" id="tray-profesor">
-          <option value="">Sin asignar</option>
-          ${profesores.map(p => `
-            <option value="${p.id}" ${isEdit && trayecto.profesor_id === p.id ? 'selected' : ''}>
-              ${sanitize(p.nombre)} ${sanitize(p.apellido)} - ${sanitize(p.especialidad || '')}
-            </option>
-          `).join('')}
-        </select>
+        ${(!isAdmin && myProfesor) ? `
+          <input type="text" class="form-input" value="${sanitize(myProfesor.nombre)} ${sanitize(myProfesor.apellido || '')}" disabled style="opacity:0.7;cursor:not-allowed;" />
+          <input type="hidden" id="tray-profesor" value="${myProfesor.id}" />
+          <p style="font-size:0.72rem;color:var(--text-muted);margin-top:4px;">Asignado automáticamente a tu perfil docente.</p>
+        ` : `
+          <select class="form-select" id="tray-profesor">
+            <option value="">Sin asignar</option>
+            ${profesores.map(p => `
+              <option value="${p.id}" ${selectedProfId === p.id ? 'selected' : ''}>
+                ${sanitize(p.nombre)} ${sanitize(p.apellido)} - ${sanitize(p.especialidad || '')}
+              </option>
+            `).join('')}
+          </select>
+        `}
       </div>
       <div class="form-group">
         <label class="form-label">Duración (ej: "3 meses", "1 año")</label>
