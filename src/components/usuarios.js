@@ -4,7 +4,7 @@
 // ============================================
 import { getContentArea } from './layout.js';
 import { getSupabase } from '../supabaseClient.js';
-import { showToast } from '../utils/helpers.js';
+import { showToast, confirmDialog } from '../utils/helpers.js';
 import { getCurrentUser } from './auth.js';
 
 let usuarios = [];
@@ -386,27 +386,30 @@ window.resetearPassword = async (userId, nombreUsuario) => {
   }
 };
 
-window.eliminarUsuario = async (userId, nombreUsuario) => {
-  if (!confirm(`¿Estás seguro de que querés ELIMINAR permanentemente la cuenta de "${nombreUsuario}"?\n\nEsta acción no se puede deshacer.`)) return;
+window.eliminarUsuario = (userId, nombreUsuario) => {
+  confirmDialog(
+    `\u00bfEliminaci\u00f3n permanente de <strong>${nombreUsuario}</strong>?<br><span style="font-size:0.8rem;color:var(--text-muted)">Esta acci\u00f3n no se puede deshacer.</span>`,
+    async () => {
+      try {
+        const { data: { session } } = await getSupabase().auth.getSession();
+        if (!session) { showToast('Sesi\u00f3n expirada', 'error'); return; }
 
-  try {
-    const { data: { session } } = await getSupabase().auth.getSession();
-    if (!session) { showToast('Sesión expirada', 'error'); return; }
+        const { data, error } = await getSupabase().functions.invoke('delete-user', {
+          body: { user_id: userId },
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        });
 
-    const { data, error } = await getSupabase().functions.invoke('delete-user', {
-      body: { user_id: userId },
-      headers: { Authorization: `Bearer ${session.access_token}` }
-    });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
 
-    if (error) throw error;
-    if (data?.error) throw new Error(data.error);
-
-    showToast(`✅ Usuario "${nombreUsuario}" eliminado correctamente.`);
-    loadUsuarios();
-
-  } catch (err) {
-    showToast('Error: ' + err.message, 'error');
-  }
+        showToast(`\u2705 Usuario "${nombreUsuario}" eliminado.`);
+        loadUsuarios();
+      } catch (err) {
+        console.error('[eliminarUsuario] Error:', err);
+        showToast(err.message || 'Error al eliminar usuario', 'error');
+      }
+    }
+  );
 };
 
 export default { renderUsuarios };
