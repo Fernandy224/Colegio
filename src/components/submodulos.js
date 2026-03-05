@@ -18,6 +18,8 @@ export async function renderSubmodulos() {
   const profesores = await fetchAll('profesores');
   const authUser = getCurrentUser();
   const isAdmin = authUser?.role === 'administrador';
+  // Perfil de profesor del usuario actual (para verificar si es responsable)
+  const myProfesor = profesores.find(p => p.auth_id === authUser?.id);
 
   content.innerHTML = `
     <div class="section-header">
@@ -47,7 +49,7 @@ export async function renderSubmodulos() {
     return `
             <div class="card" data-id="${sub.id}" style="align-items: stretch; cursor: default;">
               <div class="card-actions">
-                ${(isAdmin || !sub.created_by || sub.created_by === authUser?.id) ? `
+                ${(isAdmin || !sub.created_by || sub.created_by === authUser?.id || sub.profesor_id === myProfesor?.id) ? `
                   <button class="card-action-btn edit-btn" data-id="${sub.id}" title="Editar">${icons.edit}</button>
                   <button class="card-action-btn delete card-action-btn-del" data-id="${sub.id}" title="Eliminar">${icons.trash}</button>
                 ` : `<span style="font-size:0.6rem;padding:3px 7px;border-radius:999px;background:rgba(139,92,246,0.12);color:var(--text-muted);white-space:nowrap;">Solo lectura</span>`}
