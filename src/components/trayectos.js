@@ -6,6 +6,7 @@ import { getContentArea, getPanelRight } from './layout.js';
 import { icons, showToast, createModal, confirmDialog, sanitize, formatDate, getInitials, stringToColor } from '../utils/helpers.js';
 import { fetchAll, create, update, remove } from '../utils/data.js';
 import { getCurrentUser } from './auth.js';
+import { renderAsistenciaTab, bindAsistenciaEvents } from './asistencia.js';
 
 let currentView = 'list'; // 'list' | 'detail'
 let selectedTrayectoId = null;
@@ -246,6 +247,7 @@ async function renderTrayectoDetail(trayectoId) {
       <button class="content-tab active" data-tab="seguimiento">Seguimiento Académico</button>
       <button class="content-tab" data-tab="comparativa">Vista Comparativa</button>
       <button class="content-tab" data-tab="historial">Historial Individual</button>
+      <button class="content-tab" data-tab="asistencia">📋 Asistencia</button>
     </div>
 
     <!-- Tab Content -->
@@ -352,7 +354,7 @@ async function renderTrayectoDetail(trayectoId) {
 
   // Tabs
   content.querySelectorAll('.content-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
+    tab.addEventListener('click', async () => {
       content.querySelectorAll('.content-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       const tabId = tab.dataset.tab;
@@ -364,6 +366,12 @@ async function renderTrayectoDetail(trayectoId) {
         tabContent.innerHTML = renderComparativaTab(inscriptoData, allModulosTray, seguimiento);
       } else if (tabId === 'historial') {
         tabContent.innerHTML = renderHistorialTab(inscriptoData, allModulosTray, seguimiento, trayecto);
+      } else if (tabId === 'asistencia') {
+        const estudiantesInscriptos = inscriptoData.map(d => d.estudiante).filter(Boolean);
+        tabContent.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Cargando planilla de asistencia...</div>';
+        const html = await renderAsistenciaTab('trayecto', trayectoId, estudiantesInscriptos);
+        tabContent.innerHTML = html;
+        bindAsistenciaEvents('trayecto', trayectoId, estudiantesInscriptos, tabContent);
       }
     });
   });

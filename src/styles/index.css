@@ -1747,3 +1747,55 @@ a {
     grid-template-columns: 1fr;
   }
 }
+
+/* ============================================
+   PRINT (PDF Export)
+   ============================================ */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  .sidebar,
+  .navbar,
+  .panel-right,
+  .asistencia-toolbar,
+  .section-header .section-actions,
+  .btn-back {
+    display: none !important;
+  }
+
+  .content-main {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  .content-wrapper {
+    overflow: visible !important;
+  }
+
+  .app-layout {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .asistencia-table {
+    font-size: 10px;
+  }
+
+  .asistencia-table th,
+  .asistencia-table td {
+    border: 1px solid #ccc !important;
+  }
+
+  .asistencia-celda {
+    border-radius: 0 !important;
+    width: 24px !important;
+    height: 24px !important;
+  }
+
+  .condicion-badge {
+    border: 1px solid #ccc;
+  }
+}

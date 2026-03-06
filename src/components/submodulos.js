@@ -5,6 +5,7 @@ import { getContentArea, getPanelRight } from './layout.js';
 import { icons, showToast, createModal, confirmDialog, sanitize } from '../utils/helpers.js';
 import { fetchAll, create, update, remove } from '../utils/data.js';
 import { getCurrentUser } from './auth.js';
+import { renderAsistenciaTab, bindAsistenciaEvents } from './asistencia.js';
 
 let expandedCard = null; // ID del módulo común expandido para ver unidades
 
@@ -71,9 +72,14 @@ export async function renderSubmodulos() {
                   <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 600;">
                     Unidades (${subUnidades.length})
                   </span>
-                  <button class="btn btn-secondary add-unidad-btn" data-subid="${sub.id}" style="padding: 4px 10px; font-size: 0.75rem; border-radius: 6px;">
-                    ${icons.plus} Agregar
-                  </button>
+                  <div style="display:flex;gap:6px;">
+                    <button class="btn btn-secondary ver-asistencia-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
+                      📋 Asistencia
+                    </button>
+                    <button class="btn btn-secondary add-unidad-btn" data-subid="${sub.id}" style="padding: 4px 10px; font-size: 0.75rem; border-radius: 6px;">
+                      ${icons.plus} Agregar
+                    </button>
+                  </div>
                 </div>
                 ${subUnidades.length === 0 ? `
                   <p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 8px 0;">Sin unidades</p>
@@ -229,6 +235,16 @@ export async function renderSubmodulos() {
     });
   });
 
+  // Ver asistencia de módulo común
+  content.querySelectorAll('.ver-asistencia-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const subId = btn.dataset.subid;
+      const subNombre = btn.dataset.subnombre;
+      await openAsistenciaModuloModal(subId, subNombre);
+    });
+  });
+
   // Agregar unidad
   content.querySelectorAll('.add-unidad-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -372,4 +388,60 @@ function openUnidadModal(unidad, submoduloId, defaultOrden = 1) {
   });
 }
 
+// ============================================
+// MODAL: PLANILLA DE ASISTENCIA MÓDULO COMÚN
+// ============================================
+async function openAsistenciaModuloModal(submoduloId, submoduloNombre) {
+  // Overlay de carga inicial
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:1000px;width:95vw;">
+      <div class="modal-header">
+        <h3 class="modal-title">📋 Asistencia — ${submoduloNombre}</h3>
+        <button class="modal-close" id="modal-close-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" id="asistencia-modal-body">
+        <div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando estudiantes...</div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#modal-close-btn').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  try {
+    // Obtener trayectos que tienen este módulo común vinculado
+    const tmcLinks = await fetchAll('trayecto_modulo_comun');
+    const trayectosIds = tmcLinks
+      .filter(l => l.submodulo_id === submoduloId)
+      .map(l => l.trayecto_id);
+
+    // Obtener inscripciones de esos trayectos
+    const inscripciones = await fetchAll('inscripciones');
+    const inscripcionesRelev = inscripciones.filter(i => trayectosIds.includes(i.trayecto_id));
+
+    // Obtener estudiantes únicos
+    const estudiantes = await fetchAll('estudiantes');
+    const estudiantesIds = [...new Set(inscripcionesRelev.map(i => i.estudiante_id))];
+    const estudiantesModulo = estudiantes.filter(e => estudiantesIds.includes(e.id));
+
+    const body = overlay.querySelector('#asistencia-modal-body');
+    const { renderAsistenciaTab: renderTab, bindAsistenciaEvents: bindEvents } = await import('./asistencia.js');
+    const html = await renderTab('modulo_comun', submoduloId, estudiantesModulo);
+    body.innerHTML = html;
+    bindEvents('modulo_comun', submoduloId, estudiantesModulo, body);
+  } catch (err) {
+    const body = overlay.querySelector('#asistencia-modal-body');
+    body.innerHTML = `<div style="padding:32px;text-align:center;color:var(--accent-red);">Error al cargar: ${err.message}</div>`;
+  }
+}
+
+export { renderSubmodulos };
 export default { renderSubmodulos };
+
