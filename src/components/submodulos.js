@@ -442,6 +442,5 @@ async function openAsistenciaModuloModal(submoduloId, submoduloNombre) {
   }
 }
 
-export { renderSubmodulos };
 export default { renderSubmodulos };
 
