@@ -12,43 +12,43 @@ import { getSupabase } from '../supabaseClient.js';
 // estudiantes: array de objetos estudiante inscriptos
 // ============================================
 export async function renderAsistenciaTab(tipo, contextId, estudiantes) {
-    const campo = tipo === 'trayecto' ? 'trayecto_id' : 'modulo_comun_id';
+  const campo = tipo === 'trayecto' ? 'trayecto_id' : 'modulo_comun_id';
 
-    // Cargar registros de asistencia para este contexto
-    let registros = [];
-    try {
-        const { data, error } = await getSupabase()
-            .from('asistencias')
-            .select('*')
-            .eq(campo, contextId)
-            .order('fecha_clase', { ascending: true });
-        if (error) throw error;
-        registros = data || [];
-    } catch (err) {
-        console.error('[Asistencia] Error cargando registros:', err);
-    }
+  // Cargar registros de asistencia para este contexto
+  let registros = [];
+  try {
+    const { data, error } = await getSupabase()
+      .from('asistencias')
+      .select('*')
+      .eq(campo, contextId)
+      .order('fecha_clase', { ascending: true });
+    if (error) throw error;
+    registros = data || [];
+  } catch (err) {
+    console.error('[Asistencia] Error cargando registros:', err);
+  }
 
-    // Obtener fechas únicas de clase, ordenadas
-    const fechasSet = new Set(registros.map(r => r.fecha_clase));
-    const fechasClase = [...fechasSet].sort();
+  // Obtener fechas únicas de clase, ordenadas
+  const fechasSet = new Set(registros.map(r => r.fecha_clase));
+  const fechasClase = [...fechasSet].sort();
 
-    return buildAsistenciaHTML(tipo, contextId, campo, estudiantes, fechasClase, registros);
+  return buildAsistenciaHTML(tipo, contextId, campo, estudiantes, fechasClase, registros);
 }
 
 // ============================================
 // CONSTRUIR HTML DE LA PLANILLA
 // ============================================
 function buildAsistenciaHTML(tipo, contextId, campo, estudiantes, fechasClase, registros) {
-    if (estudiantes.length === 0) {
-        return `
+  if (estudiantes.length === 0) {
+    return `
       <div class="empty-state" style="padding:32px;">
         <p class="empty-state-text">No hay estudiantes inscriptos para registrar asistencia.</p>
       </div>`;
-    }
+  }
 
-    const tabla = buildTabla(estudiantes, fechasClase, registros);
+  const tabla = buildTabla(estudiantes, fechasClase, registros);
 
-    return `
+  return `
     <div class="asistencia-wrap">
       <div class="asistencia-toolbar">
         <div style="display:flex;gap:8px;align-items:center;">
@@ -212,6 +212,7 @@ function buildAsistenciaHTML(tipo, contextId, campo, estudiantes, fechasClase, r
         cursor: pointer;
         transition: color 0.15s;
         position: relative;
+        padding-bottom: 24px !important; /* espacio para el ícono de información */
       }
       .fecha-col-header:hover { color: var(--accent-purple-light); }
       .fecha-col-header .del-fecha-btn {
@@ -232,11 +233,29 @@ function buildAsistenciaHTML(tipo, contextId, campo, estudiantes, fechasClase, r
         line-height: 1;
       }
       .fecha-col-header:hover .del-fecha-btn { display: flex; }
+      .info-tema-btn {
+        position: absolute;
+        bottom: 2px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 0.85rem;
+        cursor: pointer;
+        opacity: 0.5;
+        transition: opacity 0.2s, transform 0.2s;
+        background: transparent;
+        border: none;
+        padding: 2px;
+      }
+      .info-tema-btn:hover { 
+        opacity: 1; 
+        transform: translateX(-50%) scale(1.2); 
+      }
       @media print {
         .asistencia-toolbar { display: none !important; }
         .asistencia-table-container { border: 1px solid #ccc; }
         .asistencia-celda.presente::after { content: "P"; }
         .asistencia-celda.ausente::after { content: "A"; }
+        .info-tema-btn, .del-fecha-btn { display: none !important; }
       }
     </style>
   `;
@@ -246,33 +265,41 @@ function buildAsistenciaHTML(tipo, contextId, campo, estudiantes, fechasClase, r
 // CONSTRUIR TABLA HTML
 // ============================================
 function buildTabla(estudiantes, fechasClase, registros) {
-    if (fechasClase.length === 0) {
-        return `
+  if (fechasClase.length === 0) {
+    return `
       <div style="text-align:center;padding:40px;border:1px dashed var(--border-color);border-radius:12px;color:var(--text-muted);">
         <div style="font-size:2rem;margin-bottom:12px;">📋</div>
         <p style="font-size:0.9rem;">No hay fechas de clase registradas.<br>Usá el botón <strong>Registrar Clase</strong> para agregar la primera.</p>
       </div>`;
-    }
+  }
 
-    const headFechas = fechasClase.map(fecha => `
-    <th class="fecha-col-header" data-fecha="${fecha}" style="position:relative;">
+  const headFechas = fechasClase.map(fecha => {
+    const regConTema = registros.find(r => r.fecha_clase === fecha && r.tema_clase);
+    const tema = regConTema ? sanitize(regConTema.tema_clase) : 'Sin tema registrado';
+    const icono = regConTema ? '📝' : '📄';
+
+    return `
+    <th class="fecha-col-header" data-fecha="${fecha}">
       ${formatFechaCorta(fecha)}
+      <button class="info-tema-btn" title="Tema: ${tema}" data-fecha="${fecha}" data-tema="${tema}">
+        ${icono}
+      </button>
       <span class="del-fecha-btn" data-fecha="${fecha}" title="Eliminar esta fecha">✕</span>
     </th>
-  `).join('');
+    `}).join('');
 
-    const rows = estudiantes.map(est => {
-        const rowRegistros = registros.filter(r => r.estudiante_id === est.id);
-        const presentes = rowRegistros.filter(r => r.presente).length;
-        const totalClases = fechasClase.length;
-        const pct = totalClases > 0 ? Math.round((presentes / totalClases) * 100) : 0;
-        const nivel = pct >= 80 ? 'verde' : pct >= 60 ? 'amarillo' : 'rojo';
-        const condicion = pct >= 80 ? 'Condición de aprobar' : pct >= 60 ? 'Regular' : 'Asistencia insuficiente';
+  const rows = estudiantes.map(est => {
+    const rowRegistros = registros.filter(r => r.estudiante_id === est.id);
+    const presentes = rowRegistros.filter(r => r.presente).length;
+    const totalClases = fechasClase.length;
+    const pct = totalClases > 0 ? Math.round((presentes / totalClases) * 100) : 0;
+    const nivel = pct >= 80 ? 'verde' : pct >= 60 ? 'amarillo' : 'rojo';
+    const condicion = pct >= 80 ? 'Condición de aprobar' : pct >= 60 ? 'Regular' : 'Asistencia insuficiente';
 
-        const celdas = fechasClase.map(fecha => {
-            const reg = rowRegistros.find(r => r.fecha_clase === fecha);
-            const presente = reg?.presente ?? false;
-            return `
+    const celdas = fechasClase.map(fecha => {
+      const reg = rowRegistros.find(r => r.fecha_clase === fecha);
+      const presente = reg?.presente ?? false;
+      return `
         <td>
           <div class="asistencia-celda ${presente ? 'presente' : 'ausente'}"
             data-estid="${est.id}"
@@ -283,9 +310,9 @@ function buildTabla(estudiantes, fechasClase, registros) {
             ${presente ? '✓' : '✗'}
           </div>
         </td>`;
-        }).join('');
+    }).join('');
 
-        return `
+    return `
       <tr>
         <td class="col-estudiante">
           <div style="display:flex;align-items:center;gap:8px;">
@@ -312,9 +339,9 @@ function buildTabla(estudiantes, fechasClase, registros) {
           <span class="condicion-badge ${nivel}">${condicion}</span>
         </td>
       </tr>`;
-    }).join('');
+  }).join('');
 
-    return `
+  return `
     <div class="asistencia-table-container">
       <table class="asistencia-table">
         <thead>
@@ -336,325 +363,387 @@ function buildTabla(estudiantes, fechasClase, registros) {
 // BIND DE EVENTOS (llamar después de setear innerHTML)
 // ============================================
 export function bindAsistenciaEvents(tipo, contextId, estudiantes, container) {
-    const campo = tipo === 'trayecto' ? 'trayecto_id' : 'modulo_comun_id';
+  const campo = tipo === 'trayecto' ? 'trayecto_id' : 'modulo_comun_id';
 
-    // Toggle de presencia
-    container.querySelectorAll('.asistencia-celda').forEach(celda => {
-        celda.addEventListener('click', async () => {
-            await toggleAsistencia(celda, campo, contextId, tipo, estudiantes, container);
-        });
+  // Toggle de presencia
+  container.querySelectorAll('.asistencia-celda').forEach(celda => {
+    celda.addEventListener('click', async () => {
+      await toggleAsistencia(celda, campo, contextId, tipo, estudiantes, container);
     });
+  });
 
-    // Botón: Registrar Clase
-    container.querySelector('#btn-agregar-fecha')?.addEventListener('click', () => {
-        openAgregarFechaModal(tipo, contextId, campo, estudiantes, container);
-    });
+  // Botón: Registrar Clase
+  container.querySelector('#btn-agregar-fecha')?.addEventListener('click', () => {
+    openAgregarFechaModal(tipo, contextId, campo, estudiantes, container);
+  });
 
-    // Eliminar fecha (botón ✕ en el header)
-    container.querySelectorAll('.del-fecha-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const fecha = btn.dataset.fecha;
-            if (!confirm(`¿Eliminar todos los registros de la fecha ${formatFechaCorta(fecha)}?`)) return;
-            await eliminarFecha(fecha, campo, contextId, tipo, estudiantes, container);
-        });
+  // Eliminar fecha (botón ✕ en el header)
+  container.querySelectorAll('.del-fecha-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const fecha = btn.dataset.fecha;
+      if (!confirm(`¿Eliminar todos los registros de la fecha ${formatFechaCorta(fecha)}?`)) return;
+      await eliminarFecha(fecha, campo, contextId, tipo, estudiantes, container);
     });
+  });
 
-    // Exportar Excel
-    container.querySelector('#btn-exportar-excel')?.addEventListener('click', () => {
-        exportarExcel(tipo, contextId, campo, estudiantes, container);
+  // Editar tema (botón 📝 en el header)
+  container.querySelectorAll('.info-tema-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const fecha = btn.dataset.fecha;
+      const tema = btn.dataset.tema;
+      openEditarTemaModal(fecha, tema, campo, contextId, tipo, estudiantes, container);
     });
+  });
 
-    // Exportar PDF
-    container.querySelector('#btn-exportar-pdf')?.addEventListener('click', () => {
-        exportarPDF(tipo, contextId);
-    });
+  // Exportar Excel
+  container.querySelector('#btn-exportar-excel')?.addEventListener('click', () => {
+    exportarExcel(tipo, contextId, campo, estudiantes, container);
+  });
+
+  // Exportar PDF
+  container.querySelector('#btn-exportar-pdf')?.addEventListener('click', () => {
+    exportarPDF(tipo, contextId);
+  });
 }
 
 // ============================================
 // TOGGLE PRESENTE/AUSENTE
 // ============================================
 async function toggleAsistencia(celda, campo, contextId, tipo, estudiantes, container) {
-    const estudianteId = celda.dataset.estid;
-    const fecha = celda.dataset.fecha;
-    const regId = celda.dataset.regid;
-    const presenteActual = celda.dataset.presente === 'true';
-    const nuevoValor = !presenteActual;
+  const estudianteId = celda.dataset.estid;
+  const fecha = celda.dataset.fecha;
+  const regId = celda.dataset.regid;
+  const presenteActual = celda.dataset.presente === 'true';
+  const nuevoValor = !presenteActual;
 
-    celda.classList.add('loading');
+  celda.classList.add('loading');
 
-    try {
-        const sb = getSupabase();
-        let resultado;
+  try {
+    const sb = getSupabase();
+    let resultado;
 
-        if (regId) {
-            // Actualizar existente
-            const { data, error } = await sb
-                .from('asistencias')
-                .update({ presente: nuevoValor })
-                .eq('id', regId)
-                .select()
-                .single();
-            if (error) throw error;
-            resultado = data;
-        } else {
-            // Crear nuevo
-            const payload = {
-                estudiante_id: estudianteId,
-                fecha_clase: fecha,
-                presente: nuevoValor,
-                [campo]: contextId,
-                // Si la otra FK existe, debe ser null
-            };
-            const { data, error } = await sb
-                .from('asistencias')
-                .insert(payload)
-                .select()
-                .single();
-            if (error) throw error;
-            resultado = data;
-        }
-
-        // Actualizar UI sin recargar todo
-        const presenteClass = nuevoValor ? 'presente' : 'ausente';
-        const ausClass = nuevoValor ? 'ausente' : 'presente';
-        celda.classList.remove(ausClass);
-        celda.classList.add(presenteClass);
-        celda.innerHTML = nuevoValor ? '✓' : '✗';
-        celda.dataset.presente = nuevoValor;
-        celda.dataset.regid = resultado.id;
-        celda.title = celda.title.replace(presenteActual ? 'Presente' : 'Ausente', nuevoValor ? 'Presente' : 'Ausente');
-
-        // Recalcular porcentajes de la fila
-        recalcularFila(celda, container);
-    } catch (err) {
-        showToast('Error al guardar asistencia: ' + err.message, 'error');
-        console.error('[Asistencia] Error toggle:', err);
-    } finally {
-        celda.classList.remove('loading');
+    if (regId) {
+      // Actualizar existente
+      const { data, error } = await sb
+        .from('asistencias')
+        .update({ presente: nuevoValor })
+        .eq('id', regId)
+        .select()
+        .single();
+      if (error) throw error;
+      resultado = data;
+    } else {
+      // Crear nuevo
+      const payload = {
+        estudiante_id: estudianteId,
+        fecha_clase: fecha,
+        presente: nuevoValor,
+        [campo]: contextId,
+        // Si la otra FK existe, debe ser null
+      };
+      const { data, error } = await sb
+        .from('asistencias')
+        .insert(payload)
+        .select()
+        .single();
+      if (error) throw error;
+      resultado = data;
     }
+
+    // Actualizar UI sin recargar todo
+    const presenteClass = nuevoValor ? 'presente' : 'ausente';
+    const ausClass = nuevoValor ? 'ausente' : 'presente';
+    celda.classList.remove(ausClass);
+    celda.classList.add(presenteClass);
+    celda.innerHTML = nuevoValor ? '✓' : '✗';
+    celda.dataset.presente = nuevoValor;
+    celda.dataset.regid = resultado.id;
+    celda.title = celda.title.replace(presenteActual ? 'Presente' : 'Ausente', nuevoValor ? 'Presente' : 'Ausente');
+
+    // Recalcular porcentajes de la fila
+    recalcularFila(celda, container);
+  } catch (err) {
+    showToast('Error al guardar asistencia: ' + err.message, 'error');
+    console.error('[Asistencia] Error toggle:', err);
+  } finally {
+    celda.classList.remove('loading');
+  }
 }
 
 // ============================================
 // RECALCULAR PORCENTAJE EN LA FILA
 // ============================================
 function recalcularFila(celda, container) {
-    const fila = celda.closest('tr');
-    if (!fila) return;
+  const fila = celda.closest('tr');
+  if (!fila) return;
 
-    const celdas = fila.querySelectorAll('.asistencia-celda');
-    const total = celdas.length;
-    const presentes = [...celdas].filter(c => c.dataset.presente === 'true').length;
-    const pct = total > 0 ? Math.round((presentes / total) * 100) : 0;
-    const nivel = pct >= 80 ? 'verde' : pct >= 60 ? 'amarillo' : 'rojo';
-    const condicion = pct >= 80 ? 'Condición de aprobar' : pct >= 60 ? 'Regular' : 'Asistencia insuficiente';
-    const colorVar = nivel === 'verde' ? 'accent-green' : nivel === 'amarillo' ? 'accent-orange' : 'accent-red';
+  const celdas = fila.querySelectorAll('.asistencia-celda');
+  const total = celdas.length;
+  const presentes = [...celdas].filter(c => c.dataset.presente === 'true').length;
+  const pct = total > 0 ? Math.round((presentes / total) * 100) : 0;
+  const nivel = pct >= 80 ? 'verde' : pct >= 60 ? 'amarillo' : 'rojo';
+  const condicion = pct >= 80 ? 'Condición de aprobar' : pct >= 60 ? 'Regular' : 'Asistencia insuficiente';
+  const colorVar = nivel === 'verde' ? 'accent-green' : nivel === 'amarillo' ? 'accent-orange' : 'accent-red';
 
-    const pctWrap = fila.querySelector('.asistencia-pct-wrap');
-    if (pctWrap) {
-        pctWrap.innerHTML = `
+  const pctWrap = fila.querySelector('.asistencia-pct-wrap');
+  if (pctWrap) {
+    pctWrap.innerHTML = `
       <div style="font-size:0.85rem;font-weight:700;color:var(--${colorVar});">${pct}%</div>
       <div class="asistencia-pct-bar-bg">
         <div class="asistencia-pct-bar-fill ${nivel}" style="width:${pct}%;"></div>
       </div>
       <div style="font-size:0.65rem;color:var(--text-muted);">${presentes}/${total}</div>
     `;
-    }
+  }
 
-    const badge = fila.querySelector('.condicion-badge');
-    if (badge) {
-        badge.className = `condicion-badge ${nivel}`;
-        badge.textContent = condicion;
-    }
+  const badge = fila.querySelector('.condicion-badge');
+  if (badge) {
+    badge.className = `condicion-badge ${nivel}`;
+    badge.textContent = condicion;
+  }
 }
 
 // ============================================
 // MODAL: AGREGAR FECHA DE CLASE
 // ============================================
 function openAgregarFechaModal(tipo, contextId, campo, estudiantes, container) {
-    const hoy = new Date().toISOString().split('T')[0];
-    const formHTML = `
+  const hoy = new Date().toISOString().split('T')[0];
+  const formHTML = `
     <div class="form-group">
       <label class="form-label">Fecha de la Clase</label>
       <input type="date" class="form-input" id="nueva-fecha-clase" value="${hoy}" max="${hoy}" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Tema de la Clase (Opcional)</label>
+      <textarea class="form-textarea" id="nueva-fecha-tema" placeholder="Ej: Introducción a fracciones..." rows="2"></textarea>
     </div>
     <p style="font-size:0.8rem;color:var(--text-muted);margin-top:8px;">
       Se crearán registros de asistencia (Ausente por defecto) para los ${estudiantes.length} estudiante${estudiantes.length !== 1 ? 's' : ''} inscriptos. Podrás marcar los presentes en la planilla.
     </p>
   `;
-    const footerHTML = `
+  const footerHTML = `
     <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
     <button class="btn btn-add" id="modal-save">${icons.plus} Agregar Fecha</button>
   `;
-    const overlay = createModal('Registrar Clase', formHTML, footerHTML);
-    overlay.querySelector('#modal-cancel').addEventListener('click', () => overlay.remove());
-    overlay.querySelector('#modal-save').addEventListener('click', async () => {
-        const fecha = document.getElementById('nueva-fecha-clase').value;
-        if (!fecha) { showToast('Seleccioná una fecha', 'error'); return; }
+  const overlay = createModal('Registrar Clase', formHTML, footerHTML);
+  overlay.querySelector('#modal-cancel').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#modal-save').addEventListener('click', async () => {
+    const fecha = document.getElementById('nueva-fecha-clase').value;
+    if (!fecha) { showToast('Seleccioná una fecha', 'error'); return; }
 
-        const btn = overlay.querySelector('#modal-save');
-        btn.disabled = true;
-        btn.textContent = 'Guardando...';
+    const btn = overlay.querySelector('#modal-save');
+    btn.disabled = true;
+    btn.textContent = 'Guardando...';
 
-        try {
-            const sb = getSupabase();
-            // Verificar si ya existe esa fecha para este contexto
-            const { data: existing } = await sb
-                .from('asistencias')
-                .select('id')
-                .eq(campo, contextId)
-                .eq('fecha_clase', fecha)
-                .limit(1);
+    try {
+      const sb = getSupabase();
+      // Verificar si ya existe esa fecha para este contexto
+      const { data: existing } = await sb
+        .from('asistencias')
+        .select('id')
+        .eq(campo, contextId)
+        .eq('fecha_clase', fecha)
+        .limit(1);
 
-            if (existing && existing.length > 0) {
-                showToast('Esa fecha ya está registrada', 'error');
-                btn.disabled = false;
-                btn.innerHTML = `${icons.plus} Agregar Fecha`;
-                return;
-            }
+      if (existing && existing.length > 0) {
+        showToast('Esa fecha ya está registrada', 'error');
+        btn.disabled = false;
+        btn.innerHTML = `${icons.plus} Agregar Fecha`;
+        return;
+      }
 
-            // Insertar registros para cada estudiante (presentes = false)
-            const registros = estudiantes.map(est => ({
-                estudiante_id: est.id,
-                fecha_clase: fecha,
-                presente: false,
-                [campo]: contextId,
-            }));
+      const tema = document.getElementById('nueva-fecha-tema').value.trim();
 
-            const { error } = await sb.from('asistencias').insert(registros);
-            if (error) throw error;
+      // Insertar registros para cada estudiante (presentes = false)
+      const registros = estudiantes.map(est => ({
+        estudiante_id: est.id,
+        fecha_clase: fecha,
+        presente: false,
+        tema_clase: tema || null,
+        [campo]: contextId,
+      }));
 
-            showToast('Fecha de clase registrada');
-            overlay.remove();
+      const { error } = await sb.from('asistencias').insert(registros);
+      if (error) throw error;
 
-            // Rerender del tab
-            await refreshAsistenciaContainer(tipo, contextId, estudiantes, container);
-        } catch (err) {
-            showToast('Error: ' + err.message, 'error');
-            btn.disabled = false;
-            btn.innerHTML = `${icons.plus} Agregar Fecha`;
-        }
-    });
+      showToast('Fecha de clase registrada');
+      overlay.remove();
+
+      // Rerender del tab
+      await refreshAsistenciaContainer(tipo, contextId, estudiantes, container);
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error');
+      btn.disabled = false;
+      btn.innerHTML = `${icons.plus} Agregar Fecha`;
+    }
+  });
+}
+
+// ============================================
+// MODAL: EDITAR TEMA DE LA CLASE
+// ============================================
+function openEditarTemaModal(fecha, temaActual, campo, contextId, tipo, estudiantes, container) {
+  const isSinTema = temaActual === 'Sin tema registrado';
+  const formHTML = `
+    <div class="form-group">
+      <label class="form-label">Tema de la Clase — ${formatFechaCorta(fecha)}</label>
+      <textarea class="form-textarea" id="edit-fecha-tema" rows="3" placeholder="Descripción de lo visto en clase...">${isSinTema ? '' : temaActual}</textarea>
+    </div>
+  `;
+  const footerHTML = `
+    <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+    <button class="btn btn-primary" id="modal-save">Guardar Tema</button>
+  `;
+  const overlay = createModal('Editar Tema de Clase', formHTML, footerHTML);
+
+  overlay.querySelector('#modal-cancel').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#modal-save').addEventListener('click', async () => {
+    const nuevoTema = document.getElementById('edit-fecha-tema').value.trim();
+    const btn = overlay.querySelector('#modal-save');
+    btn.disabled = true;
+    btn.textContent = 'Guardando...';
+
+    try {
+      const { error } = await getSupabase()
+        .from('asistencias')
+        .update({ tema_clase: nuevoTema || null })
+        .eq(campo, contextId)
+        .eq('fecha_clase', fecha);
+
+      if (error) throw error;
+
+      showToast('Tema de clase actualizado');
+      overlay.remove();
+
+      await refreshAsistenciaContainer(tipo, contextId, estudiantes, container);
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Guardar Tema';
+    }
+  });
 }
 
 // ============================================
 // ELIMINAR TODOS LOS REGISTROS DE UNA FECHA
 // ============================================
 async function eliminarFecha(fecha, campo, contextId, tipo, estudiantes, container) {
-    try {
-        const { error } = await getSupabase()
-            .from('asistencias')
-            .delete()
-            .eq(campo, contextId)
-            .eq('fecha_clase', fecha);
-        if (error) throw error;
+  try {
+    const { error } = await getSupabase()
+      .from('asistencias')
+      .delete()
+      .eq(campo, contextId)
+      .eq('fecha_clase', fecha);
+    if (error) throw error;
 
-        showToast('Fecha eliminada');
-        await refreshAsistenciaContainer(tipo, contextId, estudiantes, container);
-    } catch (err) {
-        showToast('Error al eliminar fecha: ' + err.message, 'error');
-    }
+    showToast('Fecha eliminada');
+    await refreshAsistenciaContainer(tipo, contextId, estudiantes, container);
+  } catch (err) {
+    showToast('Error al eliminar fecha: ' + err.message, 'error');
+  }
 }
 
 // ============================================
 // REFRESH DEL CONTENEDOR DE ASISTENCIA
 // ============================================
 async function refreshAsistenciaContainer(tipo, contextId, estudiantes, container) {
-    container.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Actualizando planilla...</div>';
-    const html = await renderAsistenciaTab(tipo, contextId, estudiantes);
-    container.innerHTML = html;
-    bindAsistenciaEvents(tipo, contextId, estudiantes, container);
+  container.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Actualizando planilla...</div>';
+  const html = await renderAsistenciaTab(tipo, contextId, estudiantes);
+  container.innerHTML = html;
+  bindAsistenciaEvents(tipo, contextId, estudiantes, container);
 }
 
 // ============================================
 // EXPORTAR A EXCEL (SheetJS desde CDN)
 // ============================================
 async function exportarExcel(tipo, contextId, campo, estudiantes, container) {
-    // Cargar SheetJS si no está disponible
-    if (!window.XLSX) {
-        await loadScript('https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js');
-    }
+  // Cargar SheetJS si no está disponible
+  if (!window.XLSX) {
+    await loadScript('https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js');
+  }
 
-    const XLSX = window.XLSX;
+  const XLSX = window.XLSX;
 
-    // Obtener datos actuales
-    const { data: registros } = await getSupabase()
-        .from('asistencias')
-        .select('*')
-        .eq(campo, contextId)
-        .order('fecha_clase', { ascending: true });
+  // Obtener datos actuales
+  const { data: registros } = await getSupabase()
+    .from('asistencias')
+    .select('*')
+    .eq(campo, contextId)
+    .order('fecha_clase', { ascending: true });
 
-    const fechas = [...new Set((registros || []).map(r => r.fecha_clase))].sort();
+  const fechas = [...new Set((registros || []).map(r => r.fecha_clase))].sort();
 
-    // Construir datos de la hoja
-    const header = ['Estudiante', 'DNI', ...fechas.map(f => formatFechaCorta(f)), '% Asistencia', 'Condición'];
-    const rows = estudiantes.map(est => {
-        const rowRegs = (registros || []).filter(r => r.estudiante_id === est.id);
-        const presentes = rowRegs.filter(r => r.presente).length;
-        const total = fechas.length;
-        const pct = total > 0 ? Math.round((presentes / total) * 100) : 0;
-        const condicion = pct >= 80 ? 'Condición de aprobar' : pct >= 60 ? 'Regular' : 'Asistencia insuficiente';
+  // Construir datos de la hoja
+  const header = ['Estudiante', 'DNI', ...fechas.map(f => formatFechaCorta(f)), '% Asistencia', 'Condición'];
+  const rows = estudiantes.map(est => {
+    const rowRegs = (registros || []).filter(r => r.estudiante_id === est.id);
+    const presentes = rowRegs.filter(r => r.presente).length;
+    const total = fechas.length;
+    const pct = total > 0 ? Math.round((presentes / total) * 100) : 0;
+    const condicion = pct >= 80 ? 'Condición de aprobar' : pct >= 60 ? 'Regular' : 'Asistencia insuficiente';
 
-        const celdas = fechas.map(f => {
-            const reg = rowRegs.find(r => r.fecha_clase === f);
-            return reg?.presente ? 'P' : 'A';
-        });
-
-        return [
-            `${est.nombre} ${est.apellido}`,
-            est.dni || '-',
-            ...celdas,
-            `${pct}%`,
-            condicion,
-        ];
+    const celdas = fechas.map(f => {
+      const reg = rowRegs.find(r => r.fecha_clase === f);
+      return reg?.presente ? 'P' : 'A';
     });
 
-    const wsData = [header, ...rows];
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-    // Ancho de columnas
-    ws['!cols'] = [
-        { wch: 30 },
-        { wch: 12 },
-        ...fechas.map(() => ({ wch: 12 })),
-        { wch: 12 },
-        { wch: 22 },
+    return [
+      `${est.nombre} ${est.apellido}`,
+      est.dni || '-',
+      ...celdas,
+      `${pct}%`,
+      condicion,
     ];
+  });
 
-    const nombreHoja = tipo === 'trayecto' ? 'Asistencia Trayecto' : 'Asistencia Módulo';
-    XLSX.utils.book_append_sheet(wb, ws, nombreHoja);
+  const wsData = [header, ...rows];
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-    const fecha = new Date().toISOString().split('T')[0];
-    XLSX.writeFile(wb, `planilla-asistencia-${fecha}.xlsx`);
-    showToast('Excel exportado con éxito ✓');
+  // Ancho de columnas
+  ws['!cols'] = [
+    { wch: 30 },
+    { wch: 12 },
+    ...fechas.map(() => ({ wch: 12 })),
+    { wch: 12 },
+    { wch: 22 },
+  ];
+
+  const nombreHoja = tipo === 'trayecto' ? 'Asistencia Trayecto' : 'Asistencia Módulo';
+  XLSX.utils.book_append_sheet(wb, ws, nombreHoja);
+
+  const fecha = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb, `planilla-asistencia-${fecha}.xlsx`);
+  showToast('Excel exportado con éxito ✓');
 }
 
 // ============================================
 // EXPORTAR A PDF (window.print)
 // ============================================
 function exportarPDF(tipo, contextId) {
-    window.print();
+  window.print();
 }
 
 // ============================================
 // HELPERS
 // ============================================
 function formatFechaCorta(fechaStr) {
-    if (!fechaStr) return '-';
-    // fecha en formato YYYY-MM-DD
-    const [y, m, d] = fechaStr.split('-');
-    return `${d}/${m}`;
+  if (!fechaStr) return '-';
+  // fecha en formato YYYY-MM-DD
+  const [y, m, d] = fechaStr.split('-');
+  return `${d}/${m}`;
 }
 
 function loadScript(src) {
-    return new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = src;
-        s.onload = resolve;
-        s.onerror = reject;
-        document.head.appendChild(s);
-    });
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
 }
 
 export default { renderAsistenciaTab, bindAsistenciaEvents };
