@@ -59,10 +59,10 @@ export async function renderSubmodulos() {
                 <div class="card-avatar submodulo" style="width: 48px; height: 48px; font-size: 1rem; flex-shrink: 0;">
                   ${sanitize(sub.nombre?.charAt(0) || 'M')}
                 </div>
-                <div>
                   <div class="card-name" style="text-align: left;">${sanitize(sub.nombre)}</div>
                   <div class="card-subtitle" style="text-align: left; margin-top: 2px;">Mód. Específico: ${mod ? sanitize(mod.nombre) : 'Sin módulo'}</div>
                   ${(() => { const prof = profesores.find(p => p.id === sub.profesor_id); return prof ? `<div style="font-size:0.7rem;color:var(--accent-purple-light);margin-top:2px;">Prof. a cargo: ${sanitize(prof.nombre)} ${sanitize(prof.apellido || '')}</div>` : '<div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">Sin profesor asignado</div>'; })()} 
+                  ${sub.descripcion ? `<div style="font-size:0.7rem;color:var(--text-secondary);margin-top:4px; max-width: 100%; white-space: normal; overflow-wrap: anywhere;">${sanitize(sub.descripcion)}</div>` : ''}
                 </div>
               </div>
 
