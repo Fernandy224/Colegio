@@ -45,9 +45,13 @@ export async function renderProfesores() {
               <button class="card-action-btn docs-btn" data-id="${prof.id}" title="Documentos">${icons.document}</button>
               <button class="card-action-btn delete card-action-btn-del" data-id="${prof.id}" title="Eliminar">${icons.trash}</button>
             </div>
-            <div class="card-avatar professor" style="background: ${stringToColor(prof.nombre + prof.apellido)}">
-              ${getInitials(prof.nombre, prof.apellido)}
-            </div>
+            ${prof.foto_url ? `
+              <div class="card-avatar" style="background-image: url('${prof.foto_url}'); background-size: cover; background-position: center;"></div>
+            ` : `
+              <div class="card-avatar professor" style="background: ${stringToColor(prof.nombre + prof.apellido)}">
+                ${getInitials(prof.nombre, prof.apellido)}
+              </div>
+            `}
             <div class="card-name">${sanitize(prof.nombre)} ${sanitize(prof.apellido)}</div>
             <div class="card-subtitle">${sanitize(prof.especialidad || 'Sin especialidad')}</div>
             <div class="card-details">
@@ -159,6 +163,28 @@ function openProfesorModal(profesor = null) {
       <label class="form-label">Email</label>
       <input type="email" class="form-input" id="prof-email" value="${isEdit ? sanitize(profesor.email || '') : ''}" placeholder="profesor@ejemplo.com" />
     </div>
+    ${isEdit ? `
+      <div class="form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
+        <label class="form-label">Foto de Perfil</label>
+        <div style="display: flex; align-items: center; gap: 16px;">
+          ${profesor.foto_url ? `
+            <div style="width: 60px; height: 60px; border-radius: 50%; background-image: url('${profesor.foto_url}'); background-size: cover; background-position: center; border: 2px solid var(--border-color); flex-shrink: 0;"></div>
+          ` : `
+            <div style="width: 60px; height: 60px; border-radius: 50%; background: var(--bg-secondary); border: 2px dashed var(--border-color); display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.8rem; flex-shrink: 0;">
+              Sin foto
+            </div>
+          `}
+          <div style="flex: 1;">
+            <input type="file" id="prof-foto-upload" style="display: none;" accept="image/*" />
+            <label for="prof-foto-upload" class="btn btn-secondary" style="cursor: pointer; display: inline-flex; align-items: center; gap: 8px;">
+              ${icons.upload || `<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"></path></svg>`}
+              Subir Nueva Foto
+            </label>
+            <div id="prof-foto-status" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">PNG, JPG hasta 2MB</div>
+          </div>
+        </div>
+      </div>
+    ` : ''}
   `;
 
   const footerHTML = `
@@ -169,6 +195,56 @@ function openProfesorModal(profesor = null) {
   const overlay = createModal(title, formHTML, footerHTML);
 
   overlay.querySelector('#modal-cancel').addEventListener('click', () => overlay.remove());
+
+  // Lógica para subir foto
+  if (isEdit) {
+    const uploadInput = overlay.querySelector('#prof-foto-upload');
+    const statusText = overlay.querySelector('#prof-foto-status');
+    if (uploadInput) {
+      uploadInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (file.size > 2 * 1024 * 1024) {
+          showToast('La foto no puede superar los 2MB', 'error');
+          return;
+        }
+
+        statusText.textContent = 'Subiendo...';
+        statusText.style.color = 'var(--text-secondary)';
+
+        try {
+          const fileExt = file.name.split('.').pop();
+          const fileName = `fotos/${profesor.id}_${Date.now()}.${fileExt}`;
+
+          const { error: storageError } = await getSupabase()
+            .storage.from('documentos-profesores')
+            .upload(fileName, file);
+
+          if (storageError) throw storageError;
+
+          const { data: { publicUrl } } = getSupabase()
+            .storage.from('documentos-profesores')
+            .getPublicUrl(fileName);
+
+          await update('profesores', profesor.id, { foto_url: publicUrl });
+          showToast('Foto actualizada correctamente');
+
+          overlay.remove();
+          renderProfesores();
+          // Volver a abrir el modal para mostrar la nueva foto
+          const profesActualizado = await fetchAll('profesores');
+          const p = profesActualizado.find(x => x.id === profesor.id);
+          if (p) openProfesorModal(p);
+
+        } catch (err) {
+          statusText.textContent = 'Error al subir foto';
+          statusText.style.color = 'var(--accent-red)';
+          showToast('Error al subir la foto: ' + err.message, 'error');
+        }
+      });
+    }
+  }
 
   overlay.querySelector('#modal-save').addEventListener('click', async () => {
     const nombre = document.getElementById('prof-nombre').value.trim();

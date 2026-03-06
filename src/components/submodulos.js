@@ -283,6 +283,11 @@ export async function renderSubmodulos() {
 
 function openSubmoduloModal(submodulo, modulos, profesores = []) {
   const isEdit = !!submodulo;
+  const authUser = getCurrentUser();
+  const isAdmin = authUser?.role === 'administrador';
+  const myProfesor = profesores.find(p => p.auth_id === authUser?.id);
+  const selectedProfId = isEdit ? (submodulo.profesor_id || '') : (myProfesor?.id || '');
+
   const formHTML = `
     <div class="form-group">
       <label class="form-label">Nombre del Módulo Común</label>
@@ -290,18 +295,24 @@ function openSubmoduloModal(submodulo, modulos, profesores = []) {
     </div>
     <div class="form-group">
       <label class="form-label">Profesor a Cargo</label>
-      <select class="form-select" id="sub-profesor">
-        <option value="">Sin profesor asignado</option>
-        ${profesores.map(p => `
-          <option value="${p.id}" ${isEdit && submodulo.profesor_id === p.id ? 'selected' : ''}>
-            ${sanitize(p.nombre)} ${sanitize(p.apellido || '')}
-            ${p.auth_id ? ' ✔' : ' (sin cuenta)'}
-          </option>
-        `).join('')}
-      </select>
-      <p style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">
-        Solo este profesor podrá cargar y modificar notas de este módulo en todos los trayectos.
-      </p>
+      ${(!isAdmin && myProfesor) ? `
+        <input type="text" class="form-input" value="${sanitize(myProfesor.nombre)} ${sanitize(myProfesor.apellido || '')}" disabled style="opacity:0.7;cursor:not-allowed;" />
+        <input type="hidden" id="sub-profesor" value="${myProfesor.id}" />
+        <p style="font-size:0.72rem;color:var(--text-muted);margin-top:4px;">Asignado automáticamente a tu perfil docente.</p>
+      ` : `
+        <select class="form-select" id="sub-profesor">
+          <option value="">Sin profesor asignado</option>
+          ${profesores.map(p => `
+            <option value="${p.id}" ${selectedProfId === p.id ? 'selected' : ''}>
+              ${sanitize(p.nombre)} ${sanitize(p.apellido || '')}
+              ${p.auth_id ? ' ✔' : ' (sin cuenta)'}
+            </option>
+          `).join('')}
+        </select>
+        <p style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">
+          Solo este profesor podrá cargar y modificar notas de este módulo en todos los trayectos.
+        </p>
+      `}
     </div>
     <div class="form-group">
       <label class="form-label">Módulo Específico Asociado <span style="color:var(--text-muted);font-size:0.75rem;">(opcional)</span></label>
@@ -311,6 +322,10 @@ function openSubmoduloModal(submodulo, modulos, profesores = []) {
           <option value="${m.id}" ${isEdit && submodulo.modulo_id === m.id ? 'selected' : ''}>${sanitize(m.nombre)}</option>
         `).join('')}
       </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Descripción</label>
+      <textarea class="form-textarea" id="sub-desc" placeholder="Descripción...">${isEdit ? sanitize(submodulo.descripcion || '') : ''}</textarea>
     </div>
   `;
 
@@ -326,16 +341,17 @@ function openSubmoduloModal(submodulo, modulos, profesores = []) {
     const nombre = document.getElementById('sub-nombre').value.trim();
     const modulo_id = document.getElementById('sub-modulo').value || null;
     const profesor_id = document.getElementById('sub-profesor').value || null;
+    const descripcion = document.getElementById('sub-desc').value.trim();
 
     if (!nombre) { showToast('Ingresá el nombre del módulo común', 'error'); return; }
 
     try {
       if (isEdit) {
-        await update('submodulos', submodulo.id, { nombre, modulo_id, profesor_id });
+        await update('submodulos', submodulo.id, { nombre, modulo_id, profesor_id, descripcion });
         showToast('Módulo común actualizado');
       } else {
         const authUser = getCurrentUser();
-        await create('submodulos', { nombre, modulo_id, profesor_id, created_by: authUser?.id || null });
+        await create('submodulos', { nombre, modulo_id, profesor_id, descripcion, created_by: authUser?.id || null });
         showToast('Módulo común creado');
       }
       overlay.remove();
@@ -422,20 +438,65 @@ async function openAsistenciaModuloModal(submoduloId, submoduloNombre) {
       .filter(l => l.submodulo_id === submoduloId)
       .map(l => l.trayecto_id);
 
-    // Obtener inscripciones de esos trayectos
-    const inscripciones = await fetchAll('inscripciones');
-    const inscripcionesRelev = inscripciones.filter(i => trayectosIds.includes(i.trayecto_id));
-
-    // Obtener estudiantes únicos
-    const estudiantes = await fetchAll('estudiantes');
-    const estudiantesIds = [...new Set(inscripcionesRelev.map(i => i.estudiante_id))];
-    const estudiantesModulo = estudiantes.filter(e => estudiantesIds.includes(e.id));
+    const todosTrayectos = await fetchAll('trayectos_formativos');
+    const trayectosAsociados = todosTrayectos.filter(t => trayectosIds.includes(t.id));
 
     const body = overlay.querySelector('#asistencia-modal-body');
+
+    if (trayectosAsociados.length === 0) {
+      body.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-muted);">Este módulo no está asociado a ningún trayecto formativo.</div>`;
+      return;
+    }
+
+    // Obtener inscripciones de esos trayectos
+    const inscripciones = await fetchAll('inscripciones');
+    // Obtener estudiantes únicos
+    const estudiantes = await fetchAll('estudiantes');
+
+    const tabsHTML = trayectosAsociados.map((t, idx) => `
+      <button class="content-tab ${idx === 0 ? 'active' : ''}" data-trayectoid="${t.id}">${sanitize(t.nombre)}</button>
+    `).join('');
+
+    body.innerHTML = `
+      <div class="content-tabs" style="margin-bottom: 20px;">
+        ${tabsHTML}
+      </div>
+      <div id="modulo-asistencia-tab-content">
+        <div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando...</div>
+      </div>
+    `;
+
+    const tabContent = body.querySelector('#modulo-asistencia-tab-content');
     const { renderAsistenciaTab: renderTab, bindAsistenciaEvents: bindEvents } = await import('./asistencia.js');
-    const html = await renderTab('modulo_comun', submoduloId, estudiantesModulo);
-    body.innerHTML = html;
-    bindEvents('modulo_comun', submoduloId, estudiantesModulo, body);
+
+    const loadTab = async (trayectoId) => {
+      tabContent.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando estudiantes del trayecto...</div>';
+
+      const insRelev = inscripciones.filter(i => i.trayecto_id === trayectoId);
+      const estIds = [...new Set(insRelev.map(i => i.estudiante_id))];
+      const estudiantesModulo = estudiantes.filter(e => estIds.includes(e.id));
+
+      try {
+        const html = await renderTab('modulo_comun', submoduloId, estudiantesModulo, trayectoId);
+        tabContent.innerHTML = html;
+        bindEvents('modulo_comun', submoduloId, estudiantesModulo, tabContent, trayectoId);
+      } catch (err) {
+        tabContent.innerHTML = `<div style="padding:32px;text-align:center;color:var(--accent-red);">Error al cargar: ${err.message}</div>`;
+      }
+    };
+
+    const tabButtons = body.querySelectorAll('.content-tab');
+    tabButtons.forEach(btn => {
+      btn.addEventListener('click', async () => {
+        tabButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const trayectoId = btn.dataset.trayectoid;
+        await loadTab(trayectoId);
+      });
+    });
+
+    await loadTab(trayectosAsociados[0].id);
+
   } catch (err) {
     const body = overlay.querySelector('#asistencia-modal-body');
     body.innerHTML = `<div style="padding:32px;text-align:center;color:var(--accent-red);">Error al cargar: ${err.message}</div>`;

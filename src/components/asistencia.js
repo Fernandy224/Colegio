@@ -11,17 +11,18 @@ import { getSupabase } from '../supabaseClient.js';
 // contextId: UUID del trayecto o módulo común
 // estudiantes: array de objetos estudiante inscriptos
 // ============================================
-export async function renderAsistenciaTab(tipo, contextId, estudiantes) {
-  const campo = tipo === 'trayecto' ? 'trayecto_id' : 'modulo_comun_id';
-
-  // Cargar registros de asistencia para este contexto
+export async function renderAsistenciaTab(tipo, contextId, estudiantes, trayectoId = null) {
   let registros = [];
   try {
-    const { data, error } = await getSupabase()
-      .from('asistencias')
-      .select('*')
-      .eq(campo, contextId)
-      .order('fecha_clase', { ascending: true });
+    let query = getSupabase().from('asistencias').select('*').order('fecha_clase', { ascending: true });
+
+    if (tipo === 'trayecto') {
+      query = query.eq('trayecto_id', contextId).is('modulo_comun_id', null);
+    } else {
+      query = query.eq('modulo_comun_id', contextId).eq('trayecto_id', trayectoId);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     registros = data || [];
   } catch (err) {
@@ -32,13 +33,13 @@ export async function renderAsistenciaTab(tipo, contextId, estudiantes) {
   const fechasSet = new Set(registros.map(r => r.fecha_clase));
   const fechasClase = [...fechasSet].sort();
 
-  return buildAsistenciaHTML(tipo, contextId, campo, estudiantes, fechasClase, registros);
+  return buildAsistenciaHTML(tipo, contextId, estudiantes, fechasClase, registros, trayectoId);
 }
 
 // ============================================
 // CONSTRUIR HTML DE LA PLANILLA
 // ============================================
-function buildAsistenciaHTML(tipo, contextId, campo, estudiantes, fechasClase, registros) {
+function buildAsistenciaHTML(tipo, contextId, estudiantes, fechasClase, registros, trayectoId = null) {
   if (estudiantes.length === 0) {
     return `
       <div class="empty-state" style="padding:32px;">
@@ -358,23 +359,22 @@ function buildTabla(estudiantes, fechasClase, registros) {
       </table>
     </div>`;
 }
-
 // ============================================
 // BIND DE EVENTOS (llamar después de setear innerHTML)
 // ============================================
-export function bindAsistenciaEvents(tipo, contextId, estudiantes, container) {
-  const campo = tipo === 'trayecto' ? 'trayecto_id' : 'modulo_comun_id';
-
+export function bindAsistenciaEvents(tipo, contextId, estudiantes, container, trayectoId = null) {
   // Toggle de presencia
   container.querySelectorAll('.asistencia-celda').forEach(celda => {
-    celda.addEventListener('click', async () => {
-      await toggleAsistencia(celda, campo, contextId, tipo, estudiantes, container);
+    celda.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (celda.classList.contains('loading')) return;
+      await toggleAsistencia(celda, contextId, tipo, estudiantes, container, trayectoId);
     });
   });
 
   // Botón: Registrar Clase
   container.querySelector('#btn-agregar-fecha')?.addEventListener('click', () => {
-    openAgregarFechaModal(tipo, contextId, campo, estudiantes, container);
+    openAgregarFechaModal(tipo, contextId, estudiantes, container, trayectoId);
   });
 
   // Eliminar fecha (botón ✕ en el header)
@@ -383,7 +383,7 @@ export function bindAsistenciaEvents(tipo, contextId, estudiantes, container) {
       e.stopPropagation();
       const fecha = btn.dataset.fecha;
       if (!confirm(`¿Eliminar todos los registros de la fecha ${formatFechaCorta(fecha)}?`)) return;
-      await eliminarFecha(fecha, campo, contextId, tipo, estudiantes, container);
+      await eliminarFecha(fecha, contextId, tipo, estudiantes, container, trayectoId);
     });
   });
 
@@ -393,25 +393,35 @@ export function bindAsistenciaEvents(tipo, contextId, estudiantes, container) {
       e.stopPropagation();
       const fecha = btn.dataset.fecha;
       const tema = btn.dataset.tema;
-      openEditarTemaModal(fecha, tema, campo, contextId, tipo, estudiantes, container);
+      openEditarTemaModal(fecha, tema, contextId, tipo, estudiantes, container, trayectoId);
     });
   });
 
   // Exportar Excel
   container.querySelector('#btn-exportar-excel')?.addEventListener('click', () => {
-    exportarExcel(tipo, contextId, campo, estudiantes, container);
+    exportarExcel(tipo, contextId, estudiantes, container, trayectoId);
   });
 
   // Exportar PDF
   container.querySelector('#btn-exportar-pdf')?.addEventListener('click', () => {
-    exportarPDF(tipo, contextId);
+    exportarPDF(tipo, contextId, trayectoId);
   });
+}
+
+async function refreshAsistenciaContainer(tipo, contextId, estudiantes, container, trayectoId = null) {
+  try {
+    const html = await renderAsistenciaTab(tipo, contextId, estudiantes, trayectoId);
+    container.innerHTML = html;
+    bindAsistenciaEvents(tipo, contextId, estudiantes, container, trayectoId);
+  } catch (err) {
+    console.error('Error refrescando contenedor:', err);
+  }
 }
 
 // ============================================
 // TOGGLE PRESENTE/AUSENTE
 // ============================================
-async function toggleAsistencia(celda, campo, contextId, tipo, estudiantes, container) {
+async function toggleAsistencia(celda, contextId, tipo, estudiantes, container, trayectoId) {
   const estudianteId = celda.dataset.estid;
   const fecha = celda.dataset.fecha;
   const regId = celda.dataset.regid;
@@ -439,10 +449,17 @@ async function toggleAsistencia(celda, campo, contextId, tipo, estudiantes, cont
       const payload = {
         estudiante_id: estudianteId,
         fecha_clase: fecha,
-        presente: nuevoValor,
-        [campo]: contextId,
-        // Si la otra FK existe, debe ser null
+        presente: nuevoValor
       };
+
+      if (tipo === 'trayecto') {
+        payload.trayecto_id = contextId;
+        payload.modulo_comun_id = null;
+      } else {
+        payload.modulo_comun_id = contextId;
+        payload.trayecto_id = trayectoId;
+      }
+
       const { data, error } = await sb
         .from('asistencias')
         .insert(payload)
@@ -508,7 +525,7 @@ function recalcularFila(celda, container) {
 // ============================================
 // MODAL: AGREGAR FECHA DE CLASE
 // ============================================
-function openAgregarFechaModal(tipo, contextId, campo, estudiantes, container) {
+function openAgregarFechaModal(tipo, contextId, estudiantes, container, trayectoId) {
   const hoy = new Date().toISOString().split('T')[0];
   const formHTML = `
     <div class="form-group">
@@ -540,12 +557,15 @@ function openAgregarFechaModal(tipo, contextId, campo, estudiantes, container) {
     try {
       const sb = getSupabase();
       // Verificar si ya existe esa fecha para este contexto
-      const { data: existing } = await sb
-        .from('asistencias')
-        .select('id')
-        .eq(campo, contextId)
-        .eq('fecha_clase', fecha)
-        .limit(1);
+      let query = sb.from('asistencias').select('id').eq('fecha_clase', fecha).limit(1);
+
+      if (tipo === 'trayecto') {
+        query = query.eq('trayecto_id', contextId).is('modulo_comun_id', null);
+      } else {
+        query = query.eq('modulo_comun_id', contextId).eq('trayecto_id', trayectoId);
+      }
+
+      const { data: existing } = await query;
 
       if (existing && existing.length > 0) {
         showToast('Esa fecha ya está registrada', 'error');
@@ -556,13 +576,25 @@ function openAgregarFechaModal(tipo, contextId, campo, estudiantes, container) {
 
       const tema = document.getElementById('nueva-fecha-tema').value.trim();
 
-      // Insertar registros para cada estudiante (presentes = false)
-      const registros = estudiantes.map(est => ({
-        estudiante_id: est.id,
+      // Construir payload base
+      const payloadBase = {
         fecha_clase: fecha,
         presente: false,
-        tema_clase: tema || null,
-        [campo]: contextId,
+        tema_clase: tema || null
+      };
+
+      if (tipo === 'trayecto') {
+        payloadBase.trayecto_id = contextId;
+        payloadBase.modulo_comun_id = null;
+      } else {
+        payloadBase.modulo_comun_id = contextId;
+        payloadBase.trayecto_id = trayectoId;
+      }
+
+      // Insertar registros para cada estudiante
+      const registros = estudiantes.map(est => ({
+        ...payloadBase,
+        estudiante_id: est.id
       }));
 
       const { error } = await sb.from('asistencias').insert(registros);
@@ -572,7 +604,7 @@ function openAgregarFechaModal(tipo, contextId, campo, estudiantes, container) {
       overlay.remove();
 
       // Rerender del tab
-      await refreshAsistenciaContainer(tipo, contextId, estudiantes, container);
+      await refreshAsistenciaContainer(tipo, contextId, estudiantes, container, trayectoId);
     } catch (err) {
       showToast('Error: ' + err.message, 'error');
       btn.disabled = false;
@@ -584,7 +616,7 @@ function openAgregarFechaModal(tipo, contextId, campo, estudiantes, container) {
 // ============================================
 // MODAL: EDITAR TEMA DE LA CLASE
 // ============================================
-function openEditarTemaModal(fecha, temaActual, campo, contextId, tipo, estudiantes, container) {
+function openEditarTemaModal(fecha, temaActual, contextId, tipo, estudiantes, container, trayectoId) {
   const isSinTema = temaActual === 'Sin tema registrado';
   const formHTML = `
     <div class="form-group">
@@ -606,18 +638,25 @@ function openEditarTemaModal(fecha, temaActual, campo, contextId, tipo, estudian
     btn.textContent = 'Guardando...';
 
     try {
-      const { error } = await getSupabase()
+      let query = getSupabase()
         .from('asistencias')
         .update({ tema_clase: nuevoTema || null })
-        .eq(campo, contextId)
         .eq('fecha_clase', fecha);
+
+      if (tipo === 'trayecto') {
+        query = query.eq('trayecto_id', contextId).is('modulo_comun_id', null);
+      } else {
+        query = query.eq('modulo_comun_id', contextId).eq('trayecto_id', trayectoId);
+      }
+
+      const { error } = await query;
 
       if (error) throw error;
 
       showToast('Tema de clase actualizado');
       overlay.remove();
 
-      await refreshAsistenciaContainer(tipo, contextId, estudiantes, container);
+      await refreshAsistenciaContainer(tipo, contextId, estudiantes, container, trayectoId);
     } catch (err) {
       showToast('Error: ' + err.message, 'error');
       btn.disabled = false;
@@ -629,36 +668,30 @@ function openEditarTemaModal(fecha, temaActual, campo, contextId, tipo, estudian
 // ============================================
 // ELIMINAR TODOS LOS REGISTROS DE UNA FECHA
 // ============================================
-async function eliminarFecha(fecha, campo, contextId, tipo, estudiantes, container) {
+async function eliminarFecha(fecha, contextId, tipo, estudiantes, container, trayectoId) {
   try {
-    const { error } = await getSupabase()
-      .from('asistencias')
-      .delete()
-      .eq(campo, contextId)
-      .eq('fecha_clase', fecha);
+    let query = getSupabase().from('asistencias').delete().eq('fecha_clase', fecha);
+    if (tipo === 'trayecto') {
+      query = query.eq('trayecto_id', contextId).is('modulo_comun_id', null);
+    } else {
+      query = query.eq('modulo_comun_id', contextId).eq('trayecto_id', trayectoId);
+    }
+    const { error } = await query;
     if (error) throw error;
 
     showToast('Fecha eliminada');
-    await refreshAsistenciaContainer(tipo, contextId, estudiantes, container);
+    await refreshAsistenciaContainer(tipo, contextId, estudiantes, container, trayectoId);
   } catch (err) {
     showToast('Error al eliminar fecha: ' + err.message, 'error');
   }
 }
 
-// ============================================
-// REFRESH DEL CONTENEDOR DE ASISTENCIA
-// ============================================
-async function refreshAsistenciaContainer(tipo, contextId, estudiantes, container) {
-  container.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Actualizando planilla...</div>';
-  const html = await renderAsistenciaTab(tipo, contextId, estudiantes);
-  container.innerHTML = html;
-  bindAsistenciaEvents(tipo, contextId, estudiantes, container);
-}
+
 
 // ============================================
 // EXPORTAR A EXCEL (SheetJS desde CDN)
 // ============================================
-async function exportarExcel(tipo, contextId, campo, estudiantes, container) {
+async function exportarExcel(tipo, contextId, estudiantes, container, trayectoId) {
   // Cargar SheetJS si no está disponible
   if (!window.XLSX) {
     await loadScript('https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js');
@@ -667,11 +700,15 @@ async function exportarExcel(tipo, contextId, campo, estudiantes, container) {
   const XLSX = window.XLSX;
 
   // Obtener datos actuales
-  const { data: registros } = await getSupabase()
-    .from('asistencias')
-    .select('*')
-    .eq(campo, contextId)
-    .order('fecha_clase', { ascending: true });
+  let query = getSupabase().from('asistencias').select('*').order('fecha_clase', { ascending: true });
+
+  if (tipo === 'trayecto') {
+    query = query.eq('trayecto_id', contextId).is('modulo_comun_id', null);
+  } else {
+    query = query.eq('modulo_comun_id', contextId).eq('trayecto_id', trayectoId);
+  }
+
+  const { data: registros } = await query;
 
   const fechas = [...new Set((registros || []).map(r => r.fecha_clase))].sort();
 
