@@ -69,9 +69,13 @@ async function renderTrayectosList() {
                 ` : `<span style="font-size:0.6rem;padding:3px 7px;border-radius:999px;background:rgba(139,92,246,0.12);color:var(--text-muted);white-space:nowrap;">Solo lectura</span>`}
               </div>
               <div style="display: flex; align-items: center; gap: 12px;">
-                <div class="card-avatar trayecto" style="width: 52px; height: 52px; flex-shrink: 0;">
-                  ${sanitize(tray.nombre?.charAt(0) || 'T')}
-                </div>
+                ${prof && prof.foto_url ? `
+                  <div class="card-avatar" style="width: 52px; height: 52px; flex-shrink: 0; background-image: url('${prof.foto_url}'); background-size: cover; background-position: center; border-radius: 50%;"></div>
+                ` : `
+                  <div class="card-avatar trayecto" style="width: 52px; height: 52px; flex-shrink: 0;">
+                    ${sanitize(tray.nombre?.charAt(0) || 'T')}
+                  </div>
+                `}
                 <div style="min-width: 0;">
                   <div class="card-name" style="text-align: left;">${sanitize(tray.nombre)}</div>
                   <div class="card-subtitle" style="text-align: left; margin-top: 2px;">

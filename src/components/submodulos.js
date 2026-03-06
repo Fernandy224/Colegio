@@ -56,9 +56,15 @@ export async function renderSubmodulos() {
                 ` : `<span style="font-size:0.6rem;padding:3px 7px;border-radius:999px;background:rgba(139,92,246,0.12);color:var(--text-muted);white-space:nowrap;">Solo lectura</span>`}
               </div>
               <div style="display: flex; align-items: center; gap: 12px;">
-                <div class="card-avatar submodulo" style="width: 48px; height: 48px; font-size: 1rem; flex-shrink: 0;">
-                  ${sanitize(sub.nombre?.charAt(0) || 'M')}
-                </div>
+                ${(() => {
+        const prof = profesores.find(p => p.id === sub.profesor_id);
+        if (prof && prof.foto_url) {
+          return `<div class="card-avatar" style="width: 48px; height: 48px; flex-shrink: 0; background-image: url('${prof.foto_url}'); background-size: cover; background-position: center; border-radius: 50%;"></div>`;
+        }
+        return `<div class="card-avatar submodulo" style="width: 48px; height: 48px; font-size: 1rem; flex-shrink: 0;">
+                            ${sanitize(sub.nombre?.charAt(0) || 'M')}
+                          </div>`;
+      })()}
                 <div style="min-width: 0; flex: 1;">
                   <div class="card-name" style="text-align: left;">${sanitize(sub.nombre)}</div>
                   <div class="card-subtitle" style="text-align: left; margin-top: 2px;">Mód. Específico: ${mod ? sanitize(mod.nombre) : 'Sin módulo'}</div>
