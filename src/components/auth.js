@@ -14,9 +14,9 @@ let onAuthChange = null;
 async function loadPerfil(userId) {
   const supabase = getSupabase();
 
-  // Timeout de seguridad para la consulta de perfil (7 segundos)
+  // Timeout de seguridad para la consulta de perfil (20 segundos)
   const timeoutPromise = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('Tiempo de espera agotado al cargar perfil. Reintentá.')), 7000)
+    setTimeout(() => reject(new Error('Tiempo de espera agotado al cargar perfil. Reintentá más tarde.')), 20000)
   );
 
   const fetchPromise = supabase

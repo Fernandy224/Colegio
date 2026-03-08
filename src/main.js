@@ -16,6 +16,7 @@ import { renderUsuarios } from './components/usuarios.js';
 import { registerRoute, initRouter, setOnRouteChange } from './router.js';
 import { isSupabaseConfigured } from './supabaseClient.js';
 
+
 let appStarted = false; // Guard: evita doble inicialización
 
 // Manejador global de errores para diagnóstico
@@ -96,7 +97,7 @@ function init() {
                     `;
                 }
             }
-        }, 7000);
+        }, 22000);
     } else {
         renderAuth();
     }

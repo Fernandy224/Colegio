@@ -59,11 +59,11 @@ export async function renderModulos() {
                 <h3 style="color:var(--text-primary);font-size:1.1rem;font-weight:600;margin:0;">${trayNombre}</h3>
                 <span style="font-size:0.75rem;background:rgba(255,255,255,0.1);padding:4px 10px;border-radius:999px;color:var(--text-secondary);">${mods.length} módulo${mods.length !== 1 ? 's' : ''}</span>
               </div>
-              <div class="cards-grid">
+              <div class="cards-grid compact">
                 ${mods.map(mod => {
       const isOwner = isAdmin || !mod.created_by || mod.created_by === authUser?.id;
       return `
-                    <div class="card" data-id="${mod.id}">
+                    <div class="card compact" data-id="${mod.id}">
                       <div class="card-actions">
                         ${isOwner ? `
                           <button class="card-action-btn edit-btn" data-id="${mod.id}" title="Editar">${icons.edit}</button>
