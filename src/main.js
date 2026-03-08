@@ -13,6 +13,7 @@ import { renderSubmodulos } from './components/submodulos.js';
 import { renderAprobaciones } from './components/aprobaciones.js';
 import { renderReportes } from './components/reportes.js';
 import { renderUsuarios } from './components/usuarios.js';
+import { renderResetPassword } from './components/reset-password.js';
 import { registerRoute, initRouter, setOnRouteChange } from './router.js';
 import { isSupabaseConfigured } from './supabaseClient.js';
 
@@ -108,6 +109,12 @@ function startApp() {
     appStarted = true;
     console.log('[App] Starting...');
     try {
+        // Intercept reset-password route from Supabase email link
+        if (window.location.pathname === '/reset-password' || window.location.hash.includes('type=recovery')) {
+            renderResetPassword();
+            return;
+        }
+
         renderLayout();
         initRouter();
     } catch (err) {

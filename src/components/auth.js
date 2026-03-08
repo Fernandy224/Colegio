@@ -2,7 +2,7 @@
 // Autenticación — Sin registro público
 // ============================================
 import { isSupabaseConfigured, getSupabase } from '../supabaseClient.js';
-import { showToast } from '../utils/helpers.js';
+import { showToast, createModal } from '../utils/helpers.js';
 import { setSupabaseSession } from '../utils/data.js';
 
 let currentUser = null;
@@ -217,23 +217,52 @@ export function renderAuth() {
   });
 
   // Recuperar contraseña
-  document.getElementById('link-forgot-password')?.addEventListener('click', async (e) => {
+  document.getElementById('link-forgot-password')?.addEventListener('click', (e) => {
     e.preventDefault();
-    const email = document.getElementById('auth-email').value.trim();
-    if (!email) {
-      showToast('Ingresá tu email primero en el campo de arriba', 'error');
-      document.getElementById('auth-email').focus();
-      return;
-    }
-    try {
-      const { error } = await getSupabase().auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin + window.location.pathname
-      });
-      if (error) throw error;
-      showToast(`\u2705 Enviamos un email a ${email} con el enlace para restablecer tu contrase\u00f1a.`);
-    } catch (err) {
-      showToast(err.message || 'Error al enviar el email', 'error');
-    }
+    const currentEmail = document.getElementById('auth-email').value.trim();
+
+    const contentHTML = `
+      <div class="form-group" style="margin-bottom: 0;">
+        <label class="form-label">Ingresá tu correo electrónico</label>
+        <input type="email" class="form-input" id="reset-email" placeholder="usuario@institución.edu" value="${currentEmail}" />
+      </div>
+    `;
+
+    const footerHTML = `
+      <button class="btn btn-secondary" id="btn-cancel-reset" style="margin-right:8px;">Cancelar</button>
+      <button class="btn btn-primary" id="btn-send-reset">Enviar</button>
+    `;
+
+    const modal = createModal('Recuperar contraseña', contentHTML, footerHTML);
+
+    modal.querySelector('#btn-cancel-reset').addEventListener('click', () => modal.remove());
+
+    modal.querySelector('#btn-send-reset').addEventListener('click', async () => {
+      const email = modal.querySelector('#reset-email').value.trim();
+      if (!email) {
+        showToast('Ingresá tu correo electrónico', 'error');
+        modal.querySelector('#reset-email').focus();
+        return;
+      }
+
+      const btn = modal.querySelector('#btn-send-reset');
+      btn.disabled = true;
+      btn.textContent = 'Enviando...';
+
+      try {
+        const { error } = await getSupabase().auth.resetPasswordForEmail(email, {
+          redirectTo: "https://nucleamiento.vercel.app/reset-password"
+        });
+        if (error) throw error;
+
+        showToast('Si el correo está registrado en el sistema, recibirás un enlace para restablecer tu contraseña.', 'success');
+        modal.remove();
+      } catch (err) {
+        showToast(err.message || 'Error al enviar el correo', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Enviar';
+      }
+    });
   });
 }
 
