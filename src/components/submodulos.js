@@ -39,7 +39,7 @@ export async function renderSubmodulos() {
         <p class="empty-state-text">Creá un módulo común y asocialo a un módulo específico existente.</p>
       </div>
     ` : `
-      <div class="cards-grid" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
+      <div class="cards-grid" style="grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px;">
         ${submodulos.map(sub => {
     const mod = modulos.find(m => m.id === sub.modulo_id);
     const subUnidades = unidades
@@ -48,38 +48,38 @@ export async function renderSubmodulos() {
     const isExpanded = expandedCard === sub.id;
 
     return `
-            <div class="card" data-id="${sub.id}" style="align-items: stretch; cursor: default;">
+            <div class="card" data-id="${sub.id}" style="align-items: stretch; cursor: default; padding: 12px 14px;">
               <div class="card-actions">
                 ${(isAdmin || !sub.created_by || sub.created_by === authUser?.id || sub.profesor_id === myProfesor?.id) ? `
                   <button class="card-action-btn edit-btn" data-id="${sub.id}" title="Editar">${icons.edit}</button>
                   <button class="card-action-btn delete card-action-btn-del" data-id="${sub.id}" title="Eliminar">${icons.trash}</button>
                 ` : `<span style="font-size:0.6rem;padding:3px 7px;border-radius:999px;background:rgba(139,92,246,0.12);color:var(--text-muted);white-space:nowrap;">Solo lectura</span>`}
               </div>
-              <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
                 ${(() => {
         const prof = profesores.find(p => p.id === sub.profesor_id);
         if (prof && prof.foto_url) {
-          return `<div class="card-avatar" style="width: 48px; height: 48px; flex-shrink: 0; background-image: url('${prof.foto_url}'); background-size: cover; background-position: center; border-radius: 50%;"></div>`;
+          return `<div class="card-avatar" style="width: 36px; height: 36px; flex-shrink: 0; background-image: url('${prof.foto_url}'); background-size: cover; background-position: center; border-radius: 50%;"></div>`;
         }
-        return `<div class="card-avatar submodulo" style="width: 48px; height: 48px; font-size: 1rem; flex-shrink: 0;">
+        return `<div class="card-avatar submodulo" style="width: 36px; height: 36px; font-size: 0.85rem; flex-shrink: 0;">
                             ${sanitize(sub.nombre?.charAt(0) || 'M')}
                           </div>`;
       })()}
                 <div style="min-width: 0; flex: 1;">
-                  <div class="card-name" style="text-align: left;">${sanitize(sub.nombre)}</div>
-                  <div class="card-subtitle" style="text-align: left; margin-top: 2px;">Mód. Específico: ${mod ? sanitize(mod.nombre) : 'Sin módulo'}</div>
+                  <div class="card-name" style="text-align: left; font-size: 0.85rem;">${sanitize(sub.nombre)}</div>
+                  <div class="card-subtitle" style="text-align: left; margin-top: 1px; font-size: 0.65rem;">Mód. Específico: ${mod ? sanitize(mod.nombre) : 'Sin módulo'}</div>
                   ${(() => { const prof = profesores.find(p => p.id === sub.profesor_id); return prof ? `<div style="font-size:0.7rem;color:var(--accent-purple-light);margin-top:2px;">Prof. a cargo: ${sanitize(prof.nombre)} ${sanitize(prof.apellido || '')}</div>` : '<div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">Sin profesor asignado</div>'; })()} 
                   ${sub.descripcion ? `<div style="font-size:0.7rem;color:var(--text-secondary);margin-top:4px; max-width: 100%; white-space: normal; overflow-wrap: anywhere;">${sanitize(sub.descripcion)}</div>` : ''}
                 </div>
               </div>
 
               <!-- Unidades -->
-              <div style="width: 100%; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-color);">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <div style="width: 100%; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border-color);">
+                <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px;">
                   <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 600;">
                     Unidades (${subUnidades.length})
                   </span>
-                  <div style="display:flex;gap:6px;">
+                  <div style="display:flex;gap:4px;flex-wrap:wrap;">
                     <button class="btn btn-secondary ver-asistencia-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
                       📋 Asistencia
                     </button>
@@ -89,6 +89,9 @@ export async function renderSubmodulos() {
                     ${sub.nombre && sub.nombre.toLowerCase().includes('higiene y seguridad') ? `
                     <button class="btn btn-secondary acta-submodulo-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
                       📄 Acta
+                    </button>
+                    <button class="btn btn-secondary informe-grupal-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
+                      📊 Informe
                     </button>
                     ` : ''}
                     <button class="btn btn-secondary add-unidad-btn" data-subid="${sub.id}" style="padding: 4px 10px; font-size: 0.75rem; border-radius: 6px;">
@@ -278,6 +281,17 @@ export async function renderSubmodulos() {
       const subNombre = btn.dataset.subnombre;
       const { openGenerarActaModal } = await import('./actas.js');
       await openGenerarActaModal(subId, subNombre);
+    });
+  });
+
+  // Generar Informe Grupal
+  content.querySelectorAll('.informe-grupal-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const subId = btn.dataset.subid;
+      const subNombre = btn.dataset.subnombre;
+      const { openInformeGrupalModal } = await import('./informes_grupales.js');
+      await openInformeGrupalModal(subId, subNombre);
     });
   });
 

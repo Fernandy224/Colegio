@@ -163,13 +163,24 @@ function openEstudianteModal(estudiante = null) {
         <input type="number" class="form-input" id="est-anio" value="${isEdit ? estudiante.anio_ingreso : getCurrentYear()}" required min="2000" max="2100" />
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Estado</label>
-      <select class="form-select" id="est-estado">
-        <option value="Activo" ${isEdit && estudiante.estado === 'Activo' ? 'selected' : ''}>Activo</option>
-        <option value="Inactivo" ${isEdit && estudiante.estado === 'Inactivo' ? 'selected' : ''}>Inactivo</option>
-        <option value="Egresado" ${isEdit && estudiante.estado === 'Egresado' ? 'selected' : ''}>Egresado</option>
-      </select>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Género</label>
+        <select class="form-select" id="est-genero">
+          <option value="" ${!isEdit || !estudiante.genero ? 'selected' : ''}>Seleccionar...</option>
+          <option value="Masculino" ${isEdit && estudiante.genero === 'Masculino' ? 'selected' : ''}>Masculino</option>
+          <option value="Femenino" ${isEdit && estudiante.genero === 'Femenino' ? 'selected' : ''}>Femenino</option>
+          <option value="Otro" ${isEdit && estudiante.genero === 'Otro' ? 'selected' : ''}>Otro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Estado</label>
+        <select class="form-select" id="est-estado">
+          <option value="Activo" ${isEdit && estudiante.estado === 'Activo' ? 'selected' : ''}>Activo</option>
+          <option value="Inactivo" ${isEdit && estudiante.estado === 'Inactivo' ? 'selected' : ''}>Inactivo</option>
+          <option value="Egresado" ${isEdit && estudiante.estado === 'Egresado' ? 'selected' : ''}>Egresado</option>
+        </select>
+      </div>
     </div>
   `;
 
@@ -189,6 +200,7 @@ function openEstudianteModal(estudiante = null) {
     const dni = rawDni.replace(/\D/g, ''); // Limpiar puntos, espacios, etc.
     const anio_ingreso = parseInt(document.getElementById('est-anio').value);
     const estado = document.getElementById('est-estado').value;
+    const genero = document.getElementById('est-genero').value || null;
 
     if (!nombre || !apellido || !dni || !anio_ingreso) {
       showToast('Completá todos los campos obligatorios', 'error');
@@ -208,10 +220,10 @@ function openEstudianteModal(estudiante = null) {
 
     try {
       if (isEdit) {
-        await update('estudiantes', estudiante.id, { nombre, apellido, dni, anio_ingreso, estado });
+        await update('estudiantes', estudiante.id, { nombre, apellido, dni, anio_ingreso, estado, genero });
         showToast('Estudiante actualizado');
       } else {
-        await create('estudiantes', { nombre, apellido, dni, anio_ingreso, estado });
+        await create('estudiantes', { nombre, apellido, dni, anio_ingreso, estado, genero });
         showToast('Estudiante creado exitosamente');
       }
       overlay.remove();
