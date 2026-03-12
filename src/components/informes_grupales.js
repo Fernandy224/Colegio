@@ -188,9 +188,55 @@ async function generarInformePDF(data) {
     putOnlyUsedFonts: true
   });
 
+  // Helper function to load images cleanly as Data URL and get natural dimensions
+  const loadImageDataURL = async (src) => {
+    try {
+      const resp = await fetch(src);
+      if (!resp.ok) return null;
+      const contentType = resp.headers.get('content-type');
+      if (!contentType || !contentType.startsWith('image/')) return null;
+      const blob = await resp.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const img = new Image();
+          img.onload = () => {
+            resolve({
+              data: reader.result,
+              type: contentType === 'image/jpeg' || contentType === 'image/jpg' ? 'JPEG' : 'PNG',
+              width: img.width,
+              height: img.height
+            });
+          };
+          img.onerror = () => resolve(null);
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(blob);
+      });
+    } catch (err) {
+      return null;
+    }
+  };
+
+  // Cargar imagen del encabezado específica para informes grupales
+  const encabezado = await loadImageDataURL('/imagenes/encabezado-informe.png');
+
   const pageWidth = doc.internal.pageSize.getWidth();
   const marginX = 14;
-  let cursorY = 20;
+  const marginTop = 10;
+  let cursorY = marginTop;
+
+  // ========== ENCABEZADO BANNER ==========
+  if (encabezado && encabezado.data) {
+    const imgWidth = pageWidth;
+    const aspect = encabezado.height / encabezado.width;
+    const imgHeight = imgWidth * aspect;
+    doc.addImage(encabezado.data, encabezado.type, 0, marginTop, imgWidth, imgHeight);
+
+    cursorY = marginTop + imgHeight + 8;
+  } else {
+    cursorY = 20;
+  }
 
   // ========== TÍTULO ==========
   doc.setFontSize(14);
