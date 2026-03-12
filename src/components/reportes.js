@@ -77,6 +77,7 @@ export async function renderReportes() {
             <tr>
               <th>Estudiante</th>
               <th>DNI</th>
+              <th>Trayectos</th>
               <th>Año Ingreso</th>
               <th>Estado</th>
               <th>Mód. Específicos Aprobados</th>
@@ -84,7 +85,7 @@ export async function renderReportes() {
             </tr>
           </thead>
           <tbody id="report-tbody">
-            ${renderStudentRows(estudiantes, aprobaciones, modulos, submodulos)}
+            ${renderStudentRows(estudiantes, aprobaciones, modulos, submodulos, trayectos, inscripciones)}
           </tbody>
         </table>
       </div>
@@ -182,10 +183,10 @@ export async function renderReportes() {
 
   // Filtrar General
   document.getElementById('report-apply')?.addEventListener('click', () => {
-    applyFilters(estudiantes, aprobaciones, modulos, submodulos);
+    applyFilters(estudiantes, aprobaciones, modulos, submodulos, trayectos, inscripciones);
   });
   document.getElementById('report-search')?.addEventListener('input', () => {
-    applyFilters(estudiantes, aprobaciones, modulos, submodulos);
+    applyFilters(estudiantes, aprobaciones, modulos, submodulos, trayectos, inscripciones);
   });
 
   // Filtrar Egresados
@@ -279,7 +280,7 @@ function renderEgresadosRows(estudiantes, inscripciones, trayectos, seguimiento,
   }).join('');
 }
 
-function applyFilters(allEstudiantes, allAprobaciones, modulos, submodulos) {
+function applyFilters(allEstudiantes, allAprobaciones, modulos, submodulos, trayectos, inscripciones) {
   const searchVal = (document.getElementById('report-search')?.value || '').toLowerCase();
   const anioVal = document.getElementById('report-anio')?.value;
   const moduloVal = document.getElementById('report-modulo')?.value;
@@ -314,21 +315,34 @@ function applyFilters(allEstudiantes, allAprobaciones, modulos, submodulos) {
 
   const tbody = document.getElementById('report-tbody');
   if (tbody) {
-    tbody.innerHTML = renderStudentRows(filtered, allAprobaciones, modulos, submodulos);
+    tbody.innerHTML = renderStudentRows(filtered, allAprobaciones, modulos, submodulos, trayectos, inscripciones);
   }
 }
 
-function renderStudentRows(estudiantes, aprobaciones, modulos, submodulos) {
+function renderStudentRows(estudiantes, aprobaciones, modulos, submodulos, trayectos = [], inscripciones = []) {
   if (estudiantes.length === 0) {
-    return '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 32px;">No se encontraron resultados</td></tr>';
+    return '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 32px;">No se encontraron resultados</td></tr>';
   }
 
   return estudiantes.map(est => {
     const estAprobaciones = aprobaciones.filter(a => a.estudiante_id === est.id);
+    const estInscripciones = inscripciones.filter(i => i.estudiante_id === est.id);
+    
+    const trayectosCursados = estInscripciones.map(i => {
+      const t = trayectos.find(tray => tray.id === i.trayecto_id);
+      if (!t) return null;
+      let badgeClass = 'badge-pending';
+      if (i.estado === 'Finalizado' || i.estado === 'Completo') badgeClass = 'badge-active';
+      else if (i.estado === 'Abandono') badgeClass = 'badge-inactive';
+      
+      return `<span class="badge ${badgeClass}" style="margin: 2px;">${sanitize(t.nombre)} <small style="opacity:0.8;">(${i.estado || 'En curso'})</small></span>`;
+    }).filter(Boolean);
+
     const modulosAprobados = estAprobaciones
       .filter(a => a.modulo_id)
       .map(a => modulos.find(m => m.id === a.modulo_id)?.nombre || '')
       .filter(Boolean);
+      
     const submodulosAprobados = estAprobaciones
       .filter(a => a.submodulo_id)
       .map(a => submodulos.find(s => s.id === a.submodulo_id)?.nombre || '')
@@ -338,6 +352,7 @@ function renderStudentRows(estudiantes, aprobaciones, modulos, submodulos) {
       <tr>
         <td><strong>${sanitize(est.nombre)} ${sanitize(est.apellido)}</strong></td>
         <td>${sanitize(est.dni)}</td>
+        <td>${trayectosCursados.length > 0 ? trayectosCursados.join('<br/>') : '<span style="color: var(--text-muted);">Sin trayectos</span>'}</td>
         <td>${est.anio_ingreso}</td>
         <td><span class="badge ${est.estado === 'Activo' ? 'badge-active' : est.estado === 'Egresado' ? 'badge-approved' : 'badge-inactive'}">${est.estado}</span></td>
         <td>${modulosAprobados.length > 0 ? modulosAprobados.map(m => `<span class="badge badge-approved" style="margin: 2px;">${sanitize(m)}</span>`).join('') : '<span style="color: var(--text-muted);">—</span>'}</td>

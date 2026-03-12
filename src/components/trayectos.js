@@ -6,6 +6,7 @@ import { getContentArea, getPanelRight } from './layout.js';
 import { icons, showToast, createModal, confirmDialog, sanitize, formatDate, getInitials, stringToColor } from '../utils/helpers.js';
 import { fetchAll, create, update, remove } from '../utils/data.js';
 import { getCurrentUser } from './auth.js';
+import { getSupabase } from '../supabaseClient.js';
 import { renderAsistenciaTab, bindAsistenciaEvents } from './asistencia.js';
 
 let currentView = 'list'; // 'list' | 'detail'
@@ -65,6 +66,7 @@ async function renderTrayectosList() {
               <div class="card-actions">
                 ${isOwner ? `
                   <button class="card-action-btn edit-btn" data-id="${tray.id}" title="Editar">${icons.edit}</button>
+                  <button class="card-action-btn docs-btn" data-id="${tray.id}" title="Documentos">${icons.document}</button>
                   <button class="card-action-btn delete card-action-btn-del" data-id="${tray.id}" title="Eliminar">${icons.trash}</button>
                 ` : `<span style="font-size:0.6rem;padding:3px 7px;border-radius:999px;background:rgba(139,92,246,0.12);color:var(--text-muted);white-space:nowrap;">Solo lectura</span>`}
               </div>
@@ -143,6 +145,14 @@ async function renderTrayectosList() {
     });
   });
 
+  content.querySelectorAll('.docs-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const tray = trayectos.find(t => t.id === btn.dataset.id);
+      if (tray) openDocsModal(tray);
+    });
+  });
+
   content.querySelectorAll('.card-action-btn-del').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -194,12 +204,31 @@ async function renderTrayectoDetail(trayectoId) {
   const modulosTray = modulos.filter(m => m.trayecto_id === trayectoId);
   // Módulos comunes vinculados a este trayecto
   const comunLinks = tmcLinks.filter(l => l.trayecto_id === trayectoId);
-  const modulosComunes = comunLinks.map(l => submodulos.find(s => s.id === l.submodulo_id)).filter(Boolean);
+  const modulosComunes = comunLinks.map(l => {
+    const sub = submodulos.find(s => s.id === l.submodulo_id);
+    if (!sub) return null;
+    return { ...sub, estado_link: l.estado, tmcLinkId: l.id };
+  }).filter(Boolean);
+  
   // Todos los módulos del trayecto (específicos + comunes)
   const allModulosTray = [
-    ...modulosTray.map(m => ({ ...m, tipo: 'Específico', refId: m.id, refField: 'modulo_id' })),
-    ...modulosComunes.map(s => ({ ...s, tipo: 'Común', refId: s.id, refField: 'submodulo_id' })),
-  ];
+    ...modulosTray.map(m => ({ ...m, tipo: 'Específico', refId: m.id, refField: 'modulo_id', estadoMod: m.estado || 'Pendiente' })),
+    ...modulosComunes.map(s => ({ ...s, tipo: 'Común', refId: s.id, refField: 'submodulo_id', estadoMod: s.estado_link || 'Pendiente' })),
+  ].map(m => {
+    // Calcular estado automático basado en si los estudiantes lo están cursando o lo aprobaron
+    const insIds = thisInscripciones.map(i => i.id);
+    const segs = seguimiento.filter(s => s[m.refField] === m.refId && insIds.includes(s.inscripcion_id));
+    
+    const approvedCount = insIds.filter(id => segs.some(s => s.inscripcion_id === id && s.estado === 'Aprobado')).length;
+    const hasActivity = segs.some(s => s.estado === 'Aprobado' || s.estado === 'Desaprobado' || s.estado === 'En curso');
+    const allApproved = thisInscripciones.length > 0 && approvedCount === thisInscripciones.length;
+    
+    let estadoAuto = 'Falta';
+    if (allApproved) estadoAuto = 'Completado';
+    else if (hasActivity) estadoAuto = 'En curso';
+    
+    return { ...m, estadoMod: estadoAuto };
+  });
 
   // Identificar el id del profesor actual (para restricciones de módulos comunes)
   const authUser = getCurrentUser();
@@ -238,6 +267,7 @@ async function renderTrayectoDetail(trayectoId) {
         </div>
       </div>
       <div class="section-actions">
+        <button class="btn btn-secondary" id="btn-docs">${icons.document} Documentos</button>
         <button class="btn btn-secondary" id="btn-vincular-comun">${icons.plus} Vincular Mód. Común</button>
         <button class="btn btn-secondary" id="btn-asignar-profesor">${icons.professors} Asignar Profesor</button>
         <button class="btn btn-secondary" id="btn-importar-csv">📥 Importar CSV</button>
@@ -333,12 +363,26 @@ async function renderTrayectoDetail(trayectoId) {
     <div class="widget">
       <div class="widget-header"><span class="widget-title">Módulos del Trayecto</span></div>
       ${allModulosTray.length === 0 ? '<p style="font-size:0.8125rem;color:var(--text-muted);">Sin módulos asignados</p>' :
-      allModulosTray.map(m => `
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-            <span class="mod-tipo ${m.tipo === 'Específico' ? 'especifico' : 'comun'}">${m.tipo}</span>
-            <span style="font-size:0.8125rem;color:var(--text-primary);">${sanitize(m.nombre)}</span>
+      allModulosTray.map(m => {
+        const estado = m.estadoMod;
+        let colorClass = 'var(--text-muted)';
+        let bgClass = 'var(--bg-secondary)';
+        let borderClass = 'var(--border-color)';
+        if (estado === 'En curso') { colorClass = 'var(--accent-blue)'; bgClass = 'rgba(59,130,246,0.15)'; borderClass = 'transparent'; }
+        if (estado === 'Completado') { colorClass = 'var(--accent-green)'; bgClass = 'rgba(16,185,129,0.15)'; borderClass = 'transparent'; }
+        
+        return `
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);border:1px solid ${estado !== 'Falta' ? borderClass : 'var(--border-color)'};">
+            <div style="display:flex;align-items:center;gap:8px; opacity: ${estado !== 'Falta' ? '1' : '0.6'};">
+              <span class="mod-tipo ${m.tipo === 'Específico' ? 'especifico' : 'comun'}">${m.tipo}</span>
+              <span style="font-size:0.8125rem;color:var(--text-primary);${estado !== 'Falta' ? 'font-weight:600;' : ''}">${sanitize(m.nombre)}</span>
+            </div>
+            <span style="padding:2px 8px;font-size:0.7rem; border-radius:12px; border: 1px solid ${borderClass}; background: ${bgClass}; color: ${colorClass}; font-weight: 600;">
+              ${estado}
+            </span>
           </div>
-        `).join('')
+        `;
+      }).join('')
     }
     </div>
     <div class="widget widget-gradient">
@@ -388,6 +432,11 @@ async function renderTrayectoDetail(trayectoId) {
   // Importar estudiantes desde CSV
   document.getElementById('btn-importar-csv')?.addEventListener('click', () => {
     openImportarCSVModal(trayectoId, trayecto.nombre);
+  });
+
+  // Documentos
+  document.getElementById('btn-docs')?.addEventListener('click', () => {
+    openDocsModal(trayecto);
   });
 
   // Vincular módulo común
@@ -1308,6 +1357,171 @@ function parseCSV(text) {
     headers.forEach((h, i) => { if (h) obj[h] = values[i] || ''; });
     return obj;
   }).filter(r => r.dni || r.nombre); // Descartar filas completamente vacías
+}
+
+// ============================================
+// Gestión de Documentos
+// ============================================
+async function openDocsModal(trayecto) {
+  const title = `Documentación: ${trayecto.nombre}`;
+
+  const contentHTML = `
+        <div class="docs-container" style="min-height: 300px;">
+            <div style="background: rgba(139, 92, 246, 0.05); border: 1px dashed var(--border-color); border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 20px;">
+                <input type="file" id="doc-upload-input" style="display: none;" />
+                <label for="doc-upload-input" class="btn btn-secondary" style="cursor: pointer; display: inline-flex; align-items: center; gap: 8px;">
+                    ${icons.plus} Subir Documento
+                </label>
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 10px;">
+                    PDF, DOCX, JPG o PNG. Máximo 5MB per file.
+                </p>
+                <div id="upload-status" style="font-size: 0.75rem; margin-top: 8px; font-weight: 500;"></div>
+            </div>
+            
+            <div id="docs-list" style="display: flex; flex-direction: column; gap: 10px;">
+                <div style="text-align: center; padding: 20px; color: var(--text-muted);">Cargando documentos...</div>
+            </div>
+        </div>
+    `;
+
+  const overlay = createModal(title, contentHTML, '', '560px');
+
+  const loadDocs = async () => {
+    const listContainer = document.getElementById('docs-list');
+    try {
+      const { data, error } = await getSupabase()
+        .from('documentos_trayectos')
+        .select('*')
+        .eq('trayecto_id', trayecto.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (data.length === 0) {
+        listContainer.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: var(--text-muted);">
+                        <div style="font-size: 2rem; margin-bottom: 10px;">📄</div>
+                        <p>No hay documentos guardados para este trayecto.</p>
+                    </div>
+                `;
+        return;
+      }
+
+      listContainer.innerHTML = data.map(doc => `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(255,255,255,0.02);">
+                    <div style="display: flex; align-items: center; gap: 12px; overflow: hidden;">
+                        <span style="color: var(--accent-purple-light);">${icons.document}</span>
+                        <div style="overflow: hidden;">
+                            <div style="font-size: 0.875rem; font-weight: 500; color: var(--text-primary); text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">
+                                ${sanitize(doc.nombre)}
+                            </div>
+                            <div style="font-size: 0.7rem; color: var(--text-muted);">Subido el ${formatDate(doc.created_at)}</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <a href="${doc.url}" target="_blank" class="card-action-btn" title="Descargar" style="padding: 6px; color: var(--accent-blue);">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path></svg>
+                        </a>
+                        <button class="card-action-btn delete-doc-btn" data-id="${doc.id}" data-path="${doc.url.split('documentos-trayectos/')[1]}" style="padding: 6px; color: var(--accent-red);" title="Eliminar doc">
+                            ${icons.trash}
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+      listContainer.querySelectorAll('.delete-doc-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          const docId = btn.dataset.id;
+          const filePath = btn.dataset.path;
+
+          if (confirm('¿Eliminar este documento permanentemente?')) {
+            try {
+              // 1. Eliminar de Storage
+              const { error: storageError } = await getSupabase()
+                .storage.from('documentos-trayectos')
+                .remove([filePath]);
+
+              // 2. Eliminar de Database
+              const { error: dbError } = await getSupabase()
+                .from('documentos_trayectos')
+                .delete()
+                .eq('id', docId);
+
+              if (dbError) throw dbError;
+
+              showToast('Documento eliminado');
+              loadDocs();
+            } catch (err) {
+              showToast('Error al eliminar: ' + err.message, 'error');
+            }
+          }
+        });
+      });
+
+    } catch (err) {
+      listContainer.innerHTML = `<div style="color: var(--accent-red); text-align: center; padding: 20px;">Error: ${err.message}</div>`;
+    }
+  };
+
+  // Subida de archivos
+  const setupUpload = () => {
+    const input = document.getElementById('doc-upload-input');
+    const status = document.getElementById('upload-status');
+
+    input.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      if (file.size > 5 * 1024 * 1024) {
+        showToast('El archivo es muy pesado (máximo 5MB)', 'error');
+        return;
+      }
+
+      status.textContent = 'Subiendo...';
+      status.style.color = 'var(--text-secondary)';
+
+      try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${trayecto.id}/${Date.now()}.${fileExt}`;
+
+        // 1. Subir a Supabase Storage
+        const { data: storageData, error: storageError } = await getSupabase()
+          .storage.from('documentos-trayectos')
+          .upload(fileName, file);
+
+        if (storageError) throw storageError;
+
+        // 2. Obtener URL publica
+        const { data: { publicUrl } } = getSupabase()
+          .storage.from('documentos-trayectos')
+          .getPublicUrl(fileName);
+
+        // 3. Guardar referencia en DB
+        const { error: dbError } = await getSupabase()
+          .from('documentos_trayectos')
+          .insert({
+            trayecto_id: trayecto.id,
+            nombre: file.name,
+            url: publicUrl,
+            tipo: 'general'
+          });
+
+        if (dbError) throw dbError;
+
+        showToast('Archivo subido con éxito');
+        status.textContent = '';
+        loadDocs();
+      } catch (err) {
+        console.error(err);
+        status.textContent = 'Error: ' + err.message;
+        status.style.color = 'var(--accent-red)';
+        showToast('Error al subir: ' + err.message, 'error');
+      }
+    });
+  };
+
+  loadDocs();
+  setupUpload();
 }
 
 export default { renderTrayectos };

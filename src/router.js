@@ -31,7 +31,7 @@ function handleRoute() {
     const role = user?.role || 'profesor';
 
     // Rutas protegidas solo para administradores
-    const adminOnlyRoutes = ['profesores', 'reportes', 'usuarios'];
+    const adminOnlyRoutes = ['reportes', 'usuarios'];
 
     if (adminOnlyRoutes.includes(hash) && role !== 'administrador') {
         window.location.hash = 'dashboard';

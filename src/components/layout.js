@@ -9,7 +9,7 @@ import { getCurrentYear, setCurrentYear } from '../utils/state.js';
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', roles: ['administrador', 'profesor'] },
   { id: 'estudiantes', label: 'Estudiantes', icon: 'students', roles: ['administrador', 'profesor'] },
-  { id: 'profesores', label: 'Profesores', icon: 'professors', roles: ['administrador'] },
+  { id: 'profesores', label: 'Profesores', icon: 'professors', roles: ['administrador', 'profesor'] },
   { id: 'trayectos', label: 'Trayectos', icon: 'trayectos', roles: ['administrador', 'profesor'] },
   { id: 'modulos', label: 'Mód. Específicos', icon: 'modulos', roles: ['administrador', 'profesor'] },
   { id: 'submodulos', label: 'Mód. Comunes', icon: 'submodulos', roles: ['administrador', 'profesor'] },

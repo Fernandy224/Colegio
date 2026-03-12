@@ -83,6 +83,14 @@ export async function renderSubmodulos() {
                     <button class="btn btn-secondary ver-asistencia-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
                       📋 Asistencia
                     </button>
+                    <button class="btn btn-secondary evaluar-submodulo-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
+                      📝 Evaluar
+                    </button>
+                    ${sub.nombre && sub.nombre.toLowerCase().includes('higiene y seguridad') ? `
+                    <button class="btn btn-secondary acta-submodulo-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
+                      📄 Acta
+                    </button>
+                    ` : ''}
                     <button class="btn btn-secondary add-unidad-btn" data-subid="${sub.id}" style="padding: 4px 10px; font-size: 0.75rem; border-radius: 6px;">
                       ${icons.plus} Agregar
                     </button>
@@ -249,6 +257,27 @@ export async function renderSubmodulos() {
       const subId = btn.dataset.subid;
       const subNombre = btn.dataset.subnombre;
       await openAsistenciaModuloModal(subId, subNombre);
+    });
+  });
+
+  // Evaluar módulo común
+  content.querySelectorAll('.evaluar-submodulo-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const subId = btn.dataset.subid;
+      const subNombre = btn.dataset.subnombre;
+      await openEvaluacionModuloModal(subId, subNombre);
+    });
+  });
+
+  // Generar Acta
+  content.querySelectorAll('.acta-submodulo-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const subId = btn.dataset.subid;
+      const subNombre = btn.dataset.subnombre;
+      const { openGenerarActaModal } = await import('./actas.js');
+      await openGenerarActaModal(subId, subNombre);
     });
   });
 
@@ -506,6 +535,186 @@ async function openAsistenciaModuloModal(submoduloId, submoduloNombre) {
 
   } catch (err) {
     const body = overlay.querySelector('#asistencia-modal-body');
+    body.innerHTML = `<div style="padding:32px;text-align:center;color:var(--accent-red);">Error al cargar: ${err.message}</div>`;
+  }
+}
+
+// ============================================
+// MODAL: EVALUACIÓN / SEGUIMIENTO MÓDULO COMÚN
+// ============================================
+async function openEvaluacionModuloModal(submoduloId, submoduloNombre) {
+  // Overlay de carga inicial
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:1050px;width:95vw;">
+      <div class="modal-header">
+        <h3 class="modal-title">📝 Evaluación — ${submoduloNombre}</h3>
+        <button class="modal-close" id="modal-close-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" id="evaluacion-modal-body">
+        <div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando estudiantes...</div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#modal-close-btn').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  try {
+    const tmcLinks = await fetchAll('trayecto_modulo_comun');
+    const trayectosIds = tmcLinks.filter(l => l.submodulo_id === submoduloId).map(l => l.trayecto_id);
+    const todosTrayectos = await fetchAll('trayectos_formativos');
+    const trayectosAsociados = todosTrayectos.filter(t => trayectosIds.includes(t.id));
+
+    const body = overlay.querySelector('#evaluacion-modal-body');
+
+    if (trayectosAsociados.length === 0) {
+      body.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-muted);">Este módulo no está asociado a ningún trayecto formativo.</div>`;
+      return;
+    }
+
+    const inscripciones = await fetchAll('inscripciones');
+    const estudiantes = await fetchAll('estudiantes');
+    let seguimiento = await fetchAll('seguimiento_modulos');
+
+    const tabsHTML = trayectosAsociados.map((t, idx) => `
+      <button class="content-tab ${idx === 0 ? 'active' : ''}" data-trayectoid="${t.id}">${sanitize(t.nombre)}</button>
+    `).join('');
+
+    body.innerHTML = `
+      <div class="content-tabs" style="margin-bottom: 20px;">
+        ${tabsHTML}
+      </div>
+      <div id="modulo-eval-tab-content">
+        <div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando...</div>
+      </div>
+    `;
+
+    const tabContent = body.querySelector('#modulo-eval-tab-content');
+
+    const loadTab = async (trayectoId) => {
+      const insRelev = inscripciones.filter(i => i.trayecto_id === trayectoId);
+      
+      if (insRelev.length === 0) {
+        tabContent.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">No hay inscriptos en este trayecto.</div>';
+        return;
+      }
+      
+      let rowsHTML = insRelev.map(insc => {
+        const est = estudiantes.find(e => e.id === insc.estudiante_id);
+        if (!est) return '';
+        
+        const seg = seguimiento.find(s => s.inscripcion_id === insc.id && s.submodulo_id === submoduloId);
+        const estado = seg?.estado || 'Pendiente';
+        const nota = seg?.nota || '';
+        const fecha = seg?.fecha_aprobacion ? seg.fecha_aprobacion.slice(0, 10) : '';
+        const docente = seg?.docente_evaluador || '';
+        
+        return `
+          <div class="eval-row" style="display:flex; align-items:center; gap: 12px; margin-bottom: 12px; padding: 12px; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px solid var(--border-color);">
+            <div style="flex: 1.5; min-width:180px;">
+              <div style="font-weight: 600;">${sanitize(est.nombre)} ${sanitize(est.apellido)}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">DNI: ${sanitize(est.dni)}</div>
+            </div>
+            <div style="flex: 1;">
+              <select class="form-select eval-estado" data-insc-id="${insc.id}" data-seg-id="${seg?.id || ''}" style="width: 100%; font-size: 0.8125rem;">
+                <option value="Pendiente" ${estado === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
+                <option value="En curso" ${estado === 'En curso' ? 'selected' : ''}>En curso</option>
+                <option value="Aprobado" ${estado === 'Aprobado' ? 'selected' : ''}>Aprobado</option>
+                <option value="Desaprobado" ${estado === 'Desaprobado' ? 'selected' : ''}>Desaprobado</option>
+              </select>
+            </div>
+            <div style="flex: 0.8;">
+              <input type="number" class="form-input eval-nota" data-insc-id="${insc.id}" value="${nota}" min="1" max="10" step="0.5" placeholder="Nota" style="width: 100%; font-size: 0.8125rem;" />
+            </div>
+            <div style="flex: 1.2;">
+              <input type="date" class="form-input eval-fecha" data-insc-id="${insc.id}" value="${fecha}" style="width: 100%; font-size: 0.8125rem;" />
+            </div>
+            <div style="flex: 1.5;">
+              <input type="text" class="form-input eval-docente" data-insc-id="${insc.id}" value="${sanitize(docente)}" placeholder="Docente Evaluador" style="width: 100%; font-size: 0.8125rem;" />
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+      tabContent.innerHTML = `
+        <div class="eval-container" style="max-height: 55vh; overflow-y: auto;">
+          <div style="display:flex; gap: 12px; padding: 0 12px 6px; font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">
+            <div style="flex: 1.5; min-width:180px;">Estudiante</div>
+            <div style="flex: 1;">Estado</div>
+            <div style="flex: 0.8;">Nota</div>
+            <div style="flex: 1.2;">Fecha Aprob.</div>
+            <div style="flex: 1.5;">Docente Evaluador</div>
+          </div>
+          ${rowsHTML}
+        </div>
+        <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+          <button class="btn btn-primary" id="btn-save-eval">Guardar Calificaciones</button>
+        </div>
+      `;
+
+      tabContent.querySelector('#btn-save-eval').addEventListener('click', async () => {
+        try {
+          const rows = tabContent.querySelectorAll('.eval-row');
+          for (const row of rows) {
+            const estadoSelect = row.querySelector('.eval-estado');
+            const inscId = estadoSelect.dataset.inscId;
+            const segId = estadoSelect.dataset.segId;
+            const estado = estadoSelect.value;
+            const nota = row.querySelector('.eval-nota').value ? parseFloat(row.querySelector('.eval-nota').value) : null;
+            const fecha_aprobacion = row.querySelector('.eval-fecha').value || null;
+            const docente_evaluador = row.querySelector('.eval-docente').value.trim() || null;
+            
+            const record = { estado, nota, fecha_aprobacion, docente_evaluador };
+
+            if (segId) {
+              await update('seguimiento_modulos', segId, record);
+            } else if (estado !== 'Pendiente' || nota || fecha_aprobacion || docente_evaluador) {
+              await create('seguimiento_modulos', {
+                inscripcion_id: inscId,
+                submodulo_id: submoduloId,
+                ...record
+              });
+            }
+          }
+          showToast('Calificaciones guardadas exitosamente');
+          const btnSave = tabContent.querySelector('#btn-save-eval');
+          btnSave.innerHTML = '✔ Guardado';
+          btnSave.classList.replace('btn-primary', 'btn-secondary');
+          setTimeout(() => {
+            btnSave.innerHTML = 'Guardar Calificaciones';
+            btnSave.classList.replace('btn-secondary', 'btn-primary');
+          }, 2000);
+          
+          // Refrescar caché de seguimiento para próximos cambios en la misma ventana
+          seguimiento = await fetchAll('seguimiento_modulos');
+          
+        } catch (err) {
+          showToast('Error al guardar: ' + err.message, 'error');
+        }
+      });
+    };
+
+    const tabButtons = body.querySelectorAll('.content-tab');
+    tabButtons.forEach(btn => {
+      btn.addEventListener('click', async () => {
+        tabButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const trayectoId = btn.dataset.trayectoid;
+        await loadTab(trayectoId);
+      });
+    });
+
+    await loadTab(trayectosAsociados[0].id);
+
+  } catch (err) {
+    const body = overlay.querySelector('#evaluacion-modal-body');
     body.innerHTML = `<div style="padding:32px;text-align:center;color:var(--accent-red);">Error al cargar: ${err.message}</div>`;
   }
 }
