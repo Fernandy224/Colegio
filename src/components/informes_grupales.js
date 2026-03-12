@@ -264,15 +264,16 @@ async function generarInformePDF(data) {
     cursorY = 20;
   }
 
+  // Utilizar 'helvetica' como la opción más parecida a las fuentes sans-serif estándar en jsPDF base
   // ========== TÍTULO ==========
-  doc.setFontSize(12);
+  doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
   doc.text('NUCLEAMIENTO N° 6', pageWidth / 2, cursorY, { align: 'center' });
-  cursorY += 5;
-  doc.setFontSize(10);
+  cursorY += 6;
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   doc.text('Escuela para Jóvenes, Adultos y Formación Profesional', pageWidth / 2, cursorY, { align: 'center' });
-  cursorY += 6;
+  cursorY += 10;
 
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
@@ -280,19 +281,22 @@ async function generarInformePDF(data) {
   cursorY += 5;
   doc.setFontSize(11);
   doc.text(String(getCurrentYear()), pageWidth / 2, cursorY, { align: 'center' });
-  cursorY += 8;
+  cursorY += 10;
 
   // ========== DATOS INSTITUCIONALES ==========
-  doc.setFontSize(9);
+  doc.setFontSize(11);
   const writeLabel = (label, value, y) => {
     doc.setFont('helvetica', 'bold');
     doc.text(label, marginX, y);
     const lw = doc.getTextWidth(label);
     doc.setFont('helvetica', 'normal');
-    doc.text(String(value || ''), marginX + lw + 2, y);
+    const displayVal = String(value || '');
+    if (displayVal.length > 0) {
+      doc.text(displayVal, marginX + lw + 2, y);
+    }
   };
 
-  const lineStep = 5.5;
+  const lineStep = 6; // Espaciado cómodo pero no excesivo
 
   writeLabel('ESTABLECIMIENTO: ', 'NUCLEAMIENTO EDUCATIVO N° 6', cursorY);
   cursorY += lineStep;
@@ -345,7 +349,7 @@ async function generarInformePDF(data) {
   doc.setFont('helvetica', 'bold');
   doc.text(`VARONES: ${data.varones}`, marginX, cursorY);
   doc.text(`MUJERES: ${data.mujeres}`, marginX + 60, cursorY);
-  cursorY += 10;
+  cursorY += 12;
 
   let txt1 = '';
   let txt2 = '';
@@ -361,48 +365,54 @@ async function generarInformePDF(data) {
     txt3 = 'Los contenidos restantes serán desarrollados en el próximo semestre con el fin de completar el programa correspondiente al módulo.';
   }
 
+  // Interlineado 1.5: La línea base se incrementa ~1.5 veces el tamaño de la fuente.
+  // Fuente 11pt, lineHeightFact aprox de 1.15 => le sumamos para lograr espaciado 1.5.
+  const lineHeight15 = 6.5; 
+
   // ========== SECCIÓN 1 ==========
-  doc.setFontSize(10);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
   doc.text('CARACTERÍSTICAS DEL GRUPO', marginX, cursorY);
-  cursorY += 5;
+  cursorY += 6;
 
-  doc.setFontSize(9);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   const maxTextWidth = pageWidth - (marginX * 2);
   const lines1 = doc.splitTextToSize(txt1, maxTextWidth);
-  doc.text(lines1, marginX, cursorY);
-  cursorY += (lines1.length * 4) + 6;
+  doc.text(lines1, marginX, cursorY, { lineHeightFactor: 1.5 });
+  cursorY += (lines1.length * lineHeight15) + 6;
 
   // ========== SECCIÓN 2 ==========
-  doc.setFontSize(10);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
   doc.text('EL GRUPO EN RELACIÓN CON LOS CONTENIDOS TRABAJADOS', marginX, cursorY);
-  cursorY += 5;
+  cursorY += 6;
 
-  doc.setFontSize(9);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   const lines2 = doc.splitTextToSize(txt2, maxTextWidth);
-  doc.text(lines2, marginX, cursorY);
-  cursorY += (lines2.length * 4) + 6;
+  doc.text(lines2, marginX, cursorY, { lineHeightFactor: 1.5 });
+  cursorY += (lines2.length * lineHeight15) + 6;
 
   // ========== SECCIÓN 3 — Apreciación ==========
-  doc.setFontSize(10);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
   doc.text('APRECIACIÓN:', marginX, cursorY);
-  cursorY += 5;
+  cursorY += 6;
 
-  doc.setFontSize(9);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   const lines3 = doc.splitTextToSize(txt3, maxTextWidth);
-  doc.text(lines3, marginX, cursorY);
-  cursorY += (lines3.length * 4) + 12;
+  doc.text(lines3, marginX, cursorY, { lineHeightFactor: 1.5 });
+  
+  // Agregar un buen espacio extra para firmas (si entra, si no salta de hoja)
+  cursorY += (lines3.length * lineHeight15) + 24;
 
   // ========== FIRMAS ==========
-  // Verificar si entramos en la página, si no, nueva página
-  if (cursorY > 250) {
+  // Verificar si entramos en la página (A4 portrait = 297mm alto)
+  if (cursorY > 265) {
     doc.addPage();
-    cursorY = 30;
+    cursorY = 25;
   }
 
   doc.setFontSize(10);
