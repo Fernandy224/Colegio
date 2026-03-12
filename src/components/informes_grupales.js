@@ -97,27 +97,45 @@ export async function openInformeGrupalModal(submoduloId, submoduloNombre) {
             </div>
           </div>
 
-          <div class="form-group">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+            <div class="form-group">
+              <label class="form-label">Grupo</label>
+              <input type="text" class="form-input" id="inf-grupo" placeholder="Ej: A, B..." />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Turno</label>
+              <input type="text" class="form-input" id="inf-turno" placeholder="Ej: Mañana, Tarde..." />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Día de cursado</label>
+              <input type="text" class="form-input" id="inf-dia" placeholder="Ej: Lunes y Miércoles" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Horario</label>
+              <input type="text" class="form-input" id="inf-horario" placeholder="Ej: 18:00 a 21:00" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Fecha de inicio</label>
+              <input type="date" class="form-input" id="inf-fecha-ini" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Fecha de finalización</label>
+              <input type="date" class="form-input" id="inf-fecha-fin" />
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top:12px;">
             <label class="form-label">Fecha del informe</label>
             <input type="text" class="form-input" id="inf-fecha" value="${fechaHoy}" placeholder="DD/MM/AAAA" />
           </div>
 
           <div class="form-group">
-            <label class="form-label">Sección 1 — Características del grupo</label>
-            <textarea class="form-input" id="inf-caract" rows="4" placeholder="Describir las características del grupo de estudiantes..."  style="resize:vertical;min-height:80px;"></textarea>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Sección 2 — El grupo en relación con los contenidos trabajados</label>
-            <textarea class="form-input" id="inf-contenidos" rows="4" placeholder="Describir la relación del grupo con los contenidos..." style="resize:vertical;min-height:80px;"></textarea>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Sección 3 — Estado del módulo</label>
+            <label class="form-label">Estado del grupo</label>
             <select class="form-select" id="inf-estado">
-              <option value="completado">Módulo completado</option>
-              <option value="en_desarrollo">Módulo en desarrollo</option>
+              <option value="completado">1️⃣ CONTENIDOS COMPLETADOS</option>
+              <option value="en_desarrollo">2️⃣ CONTINÚA PRÓXIMO SEMESTRE</option>
             </select>
+            <small style="color:var(--text-muted);display:block;margin-top:4px;">El contenido del informe se redactará automáticamente según esta opción.</small>
           </div>
 
           <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px;">
@@ -128,13 +146,17 @@ export async function openInformeGrupalModal(submoduloId, submoduloNombre) {
 
       // Evento generar PDF
       tabContent.querySelector('#btn-generar-informe').addEventListener('click', async () => {
-        const caracteristicas = document.getElementById('inf-caract').value.trim();
-        const contenidos = document.getElementById('inf-contenidos').value.trim();
+        const grupo = document.getElementById('inf-grupo').value.trim();
+        const turno = document.getElementById('inf-turno').value.trim();
+        const diaCursado = document.getElementById('inf-dia').value.trim();
+        const horario = document.getElementById('inf-horario').value.trim();
+        const fechaIni = document.getElementById('inf-fecha-ini').value;
+        const fechaFin = document.getElementById('inf-fecha-fin').value;
         const estado = document.getElementById('inf-estado').value;
         const fecha = document.getElementById('inf-fecha').value.trim();
 
-        if (!caracteristicas || !contenidos) {
-          showToast('Completá las secciones 1 y 2 del informe', 'error');
+        if (!grupo || !turno || !diaCursado || !horario || !fechaIni || !fechaFin) {
+          showToast('Completá todos los campos del grupo (Turno, fechas, etc.)', 'error');
           return;
         }
 
@@ -145,11 +167,15 @@ export async function openInformeGrupalModal(submoduloId, submoduloNombre) {
             modulo: modActual,
             profModulo,
             fecha,
+            grupo,
+            turno,
+            diaCursado,
+            horario,
+            fechaIni,
+            fechaFin,
             totalEstudiantes: total,
             varones,
             mujeres,
-            caracteristicas,
-            contenidos,
             estado
           });
           showToast('Informe grupal generado exitosamente');
@@ -272,18 +298,43 @@ async function generarInformePDF(data) {
   writeLabel('TRAYECTO FORMATIVO: ', data.trayecto ? data.trayecto.nombre : '', cursorY);
   cursorY += 8;
 
+  writeLabel('GRUPO: ', data.grupo || '', cursorY);
+  cursorY += 8;
+
+  writeLabel('TURNO: ', data.turno || '', cursorY);
+  cursorY += 8;
+
+  writeLabel('DÍA DE CURSADO: ', data.diaCursado || '', cursorY);
+  cursorY += 8;
+
+  writeLabel('HORARIO: ', data.horario || '', cursorY);
+  cursorY += 8;
+
+  const formatIsoToDate = (isoString) => {
+    if (!isoString) return '';
+    const parts = isoString.split('-');
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return isoString;
+  };
+  const dIni = formatIsoToDate(data.fechaIni);
+  const dFin = formatIsoToDate(data.fechaFin);
+  const periodo = (dIni && dFin) ? `Desde ${dIni} hasta ${dFin}` : '';
+  
+  writeLabel('PERÍODO: ', periodo, cursorY);
+  cursorY += 8;
+
   const profTNombre = data.profTrayecto ? `${data.profTrayecto.nombre} ${data.profTrayecto.apellido || ''}` : '';
-  writeLabel('M.E.P: ', profTNombre, cursorY);
+  writeLabel('M.E.P (Trayecto): ', profTNombre, cursorY);
   cursorY += 8;
 
   writeLabel('MODULO TRANSVERSAL: ', 'Seguridad e Higiene Laboral', cursorY);
   cursorY += 8;
 
   const profMNombre = data.profModulo ? `${data.profModulo.nombre} ${data.profModulo.apellido || ''}` : '';
-  writeLabel('M.E.P: ', profMNombre, cursorY);
+  writeLabel('DOCENTE: ', profMNombre, cursorY);
   cursorY += 8;
 
-  writeLabel('FECHA: ', data.fecha, cursorY);
+  writeLabel('FECHA INFORME: ', data.fecha, cursorY);
   cursorY += 8;
 
   writeLabel('CANTIDAD DE ESTUDIANTES: ', String(data.totalEstudiantes), cursorY);
@@ -294,56 +345,56 @@ async function generarInformePDF(data) {
   doc.text(`MUJERES: ${data.mujeres}`, marginX + 60, cursorY);
   cursorY += 14;
 
+  let txt1 = '';
+  let txt2 = '';
+  let txt3 = '';
+
+  if (data.estado === 'completado') {
+    txt1 = 'Las clases se desarrollaron durante el período previsto, manteniendo el grupo una buena participación, interés y compromiso con las actividades propuestas.';
+    txt2 = 'Durante el dictado de las clases se utilizaron diferentes herramientas metodológicas como presentaciones, observación de videos, análisis de experiencias, debates y uso de plataformas virtuales para la realización de actividades.\n\nFue posible abordar la totalidad de los contenidos previstos del módulo, logrando que los estudiantes puedan identificar riesgos laborales y aplicar normas de seguridad e higiene relacionadas con la actividad.';
+    txt3 = 'La regularidad de las clases y la asistencia del grupo permitieron alcanzar los objetivos pedagógicos previstos sin inconvenientes.';
+  } else {
+    txt1 = 'Las clases se desarrollaron durante el período previsto manteniendo el grupo interés y participación en las actividades propuestas.';
+    txt2 = 'Durante el desarrollo de las clases se utilizaron diferentes recursos metodológicos como presentaciones, análisis de situaciones, debates y uso de herramientas virtuales para fortalecer el aprendizaje.\n\nDebido a la extensión de los contenidos del módulo y a la organización institucional del trayecto formativo, no fue posible abordar la totalidad del programa durante este período.';
+    txt3 = 'Los contenidos restantes serán desarrollados en el próximo semestre con el fin de completar el programa correspondiente al módulo.';
+  }
+
   // ========== SECCIÓN 1 ==========
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('Características del grupo:', marginX, cursorY);
-  doc.setLineWidth(0.3);
-  const s1w = doc.getTextWidth('Características del grupo:');
-  doc.line(marginX, cursorY + 1.5, marginX + s1w, cursorY + 1.5);
-  cursorY += 8;
+  doc.text('CARACTERÍSTICAS DEL GRUPO', marginX, cursorY);
+  cursorY += 6;
 
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   const maxTextWidth = pageWidth - (marginX * 2);
-  const lines1 = doc.splitTextToSize(data.caracteristicas, maxTextWidth);
+  const lines1 = doc.splitTextToSize(txt1, maxTextWidth);
   doc.text(lines1, marginX, cursorY);
-  cursorY += (lines1.length * 5) + 10;
+  cursorY += (lines1.length * 5) + 6;
 
   // ========== SECCIÓN 2 ==========
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('El grupo en relación con los contenidos trabajados:', marginX, cursorY);
-  const s2w = doc.getTextWidth('El grupo en relación con los contenidos trabajados:');
-  doc.line(marginX, cursorY + 1.5, marginX + s2w, cursorY + 1.5);
-  cursorY += 8;
+  doc.text('EL GRUPO EN RELACIÓN CON LOS CONTENIDOS TRABAJADOS', marginX, cursorY);
+  cursorY += 6;
 
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  const lines2 = doc.splitTextToSize(data.contenidos, maxTextWidth);
+  const lines2 = doc.splitTextToSize(txt2, maxTextWidth);
   doc.text(lines2, marginX, cursorY);
-  cursorY += (lines2.length * 5) + 10;
+  cursorY += (lines2.length * 5) + 6;
 
   // ========== SECCIÓN 3 — Apreciación ==========
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('Apreciación:', marginX, cursorY);
-  const s3w = doc.getTextWidth('Apreciación:');
-  doc.line(marginX, cursorY + 1.5, marginX + s3w, cursorY + 1.5);
-  cursorY += 8;
-
-  let apreciacion = '';
-  if (data.estado === 'completado') {
-    apreciacion = 'La regularidad en el dictado de clases y el buen nivel de asistencia permitieron desarrollar la totalidad de los contenidos previstos para este módulo. Los estudiantes lograron apropiarse de los conocimientos propuestos, participando activamente en cada una de las actividades planteadas y demostrando interés en los temas abordados.';
-  } else {
-    apreciacion = 'Debido a diferentes situaciones que afectaron la regularidad en el dictado de clases, no fue posible desarrollar la totalidad de los contenidos previstos en el tiempo estipulado. Por tal motivo se continuará con el dictado de las clases hasta lograr completar los contenidos propuestos y alcanzar los objetivos de aprendizaje previstos para el módulo.';
-  }
+  doc.text('APRECIACIÓN:', marginX, cursorY);
+  cursorY += 6;
 
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  const lines3 = doc.splitTextToSize(apreciacion, maxTextWidth);
+  const lines3 = doc.splitTextToSize(txt3, maxTextWidth);
   doc.text(lines3, marginX, cursorY);
-  cursorY += (lines3.length * 5) + 20;
+  cursorY += (lines3.length * 5) + 16;
 
   // ========== FIRMAS ==========
   // Verificar si entramos en la página, si no, nueva página
@@ -461,27 +512,45 @@ export async function openInformeGrupalTrayecto(trayectoId) {
           </div>
         </div>
 
-        <div class="form-group">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+          <div class="form-group">
+            <label class="form-label">Grupo</label>
+            <input type="text" class="form-input" id="inf-tray-grupo" placeholder="Ej: A, B..." />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Turno</label>
+            <input type="text" class="form-input" id="inf-tray-turno" placeholder="Ej: Mañana, Tarde..." />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Día de cursado</label>
+            <input type="text" class="form-input" id="inf-tray-dia" placeholder="Ej: Lunes y Miércoles" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Horario</label>
+            <input type="text" class="form-input" id="inf-tray-horario" placeholder="Ej: 18:00 a 21:00" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Fecha de inicio</label>
+            <input type="date" class="form-input" id="inf-tray-fecha-ini" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Fecha de finalización</label>
+            <input type="date" class="form-input" id="inf-tray-fecha-fin" />
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top:12px;">
           <label class="form-label">Fecha del informe</label>
           <input type="text" class="form-input" id="inf-tray-fecha" value="${fechaHoy}" placeholder="DD/MM/AAAA" />
         </div>
 
         <div class="form-group">
-          <label class="form-label">Sección 1 — Características del grupo</label>
-          <textarea class="form-input" id="inf-tray-caract" rows="4" placeholder="Describir las características del grupo de estudiantes..." style="resize:vertical;min-height:80px;"></textarea>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Sección 2 — El grupo en relación con los contenidos trabajados</label>
-          <textarea class="form-input" id="inf-tray-contenidos" rows="4" placeholder="Describir la relación del grupo con los contenidos..." style="resize:vertical;min-height:80px;"></textarea>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Sección 3 — Estado del trayecto</label>
+          <label class="form-label">Estado del grupo</label>
           <select class="form-select" id="inf-tray-estado">
-            <option value="completado">Contenido completo</option>
-            <option value="en_desarrollo">Contenido en proceso</option>
+            <option value="completado">1️⃣ CONTENIDOS COMPLETADOS</option>
+            <option value="en_desarrollo">2️⃣ CONTINÚA PRÓXIMO SEMESTRE</option>
           </select>
+          <small style="color:var(--text-muted);display:block;margin-top:4px;">El contenido del informe se redactará automáticamente según esta opción.</small>
         </div>
 
         <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px;">
@@ -491,13 +560,17 @@ export async function openInformeGrupalTrayecto(trayectoId) {
     `;
 
     body.querySelector('#btn-generar-informe-tray').addEventListener('click', async () => {
-      const caracteristicas = document.getElementById('inf-tray-caract').value.trim();
-      const contenidos = document.getElementById('inf-tray-contenidos').value.trim();
+      const grupo = document.getElementById('inf-tray-grupo').value.trim();
+      const turno = document.getElementById('inf-tray-turno').value.trim();
+      const diaCursado = document.getElementById('inf-tray-dia').value.trim();
+      const horario = document.getElementById('inf-tray-horario').value.trim();
+      const fechaIni = document.getElementById('inf-tray-fecha-ini').value;
+      const fechaFin = document.getElementById('inf-tray-fecha-fin').value;
       const estado = document.getElementById('inf-tray-estado').value;
       const fecha = document.getElementById('inf-tray-fecha').value.trim();
 
-      if (!caracteristicas || !contenidos) {
-        showToast('Completá las secciones 1 y 2 del informe', 'error');
+      if (!grupo || !turno || !diaCursado || !horario || !fechaIni || !fechaFin) {
+        showToast('Completá todos los campos del grupo (Turno, fechas, etc.)', 'error');
         return;
       }
 
@@ -508,11 +581,15 @@ export async function openInformeGrupalTrayecto(trayectoId) {
           modulo: modHigiene || null,
           profModulo,
           fecha,
+          grupo,
+          turno,
+          diaCursado,
+          horario,
+          fechaIni,
+          fechaFin,
           totalEstudiantes: total,
           varones,
           mujeres,
-          caracteristicas,
-          contenidos,
           estado
         });
         showToast('Informe grupal generado exitosamente');
