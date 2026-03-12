@@ -265,25 +265,25 @@ async function generarInformePDF(data) {
   }
 
   // ========== TÍTULO ==========
-  doc.setFontSize(14);
+  doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.text('NUCLEAMIENTO N° 6', pageWidth / 2, cursorY, { align: 'center' });
-  cursorY += 6;
-  doc.setFontSize(11);
+  cursorY += 5;
+  doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text('Escuela para Jóvenes, Adultos y Formación Profesional', pageWidth / 2, cursorY, { align: 'center' });
-  cursorY += 10;
+  cursorY += 6;
 
-  doc.setFontSize(16);
+  doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
   doc.text('INFORME GRUPAL', pageWidth / 2, cursorY, { align: 'center' });
-  cursorY += 6;
-  doc.setFontSize(12);
+  cursorY += 5;
+  doc.setFontSize(11);
   doc.text(String(getCurrentYear()), pageWidth / 2, cursorY, { align: 'center' });
-  cursorY += 12;
+  cursorY += 8;
 
   // ========== DATOS INSTITUCIONALES ==========
-  doc.setFontSize(11);
+  doc.setFontSize(9);
   const writeLabel = (label, value, y) => {
     doc.setFont('helvetica', 'bold');
     doc.text(label, marginX, y);
@@ -292,23 +292,25 @@ async function generarInformePDF(data) {
     doc.text(String(value || ''), marginX + lw + 2, y);
   };
 
+  const lineStep = 5.5;
+
   writeLabel('ESTABLECIMIENTO: ', 'NUCLEAMIENTO EDUCATIVO N° 6', cursorY);
-  cursorY += 8;
+  cursorY += lineStep;
 
   writeLabel('TRAYECTO FORMATIVO: ', data.trayecto ? data.trayecto.nombre : '', cursorY);
-  cursorY += 8;
+  cursorY += lineStep;
 
   writeLabel('GRUPO: ', data.grupo || '', cursorY);
-  cursorY += 8;
+  cursorY += lineStep;
 
   writeLabel('TURNO: ', data.turno || '', cursorY);
-  cursorY += 8;
+  cursorY += lineStep;
 
   writeLabel('DÍA DE CURSADO: ', data.diaCursado || '', cursorY);
-  cursorY += 8;
+  cursorY += lineStep;
 
   writeLabel('HORARIO: ', data.horario || '', cursorY);
-  cursorY += 8;
+  cursorY += lineStep;
 
   const formatIsoToDate = (isoString) => {
     if (!isoString) return '';
@@ -321,29 +323,29 @@ async function generarInformePDF(data) {
   const periodo = (dIni && dFin) ? `Desde ${dIni} hasta ${dFin}` : '';
   
   writeLabel('PERÍODO: ', periodo, cursorY);
-  cursorY += 8;
+  cursorY += lineStep;
 
   const profTNombre = data.profTrayecto ? `${data.profTrayecto.nombre} ${data.profTrayecto.apellido || ''}` : '';
   writeLabel('M.E.P (Trayecto): ', profTNombre, cursorY);
-  cursorY += 8;
+  cursorY += lineStep;
 
   writeLabel('MODULO TRANSVERSAL: ', 'Seguridad e Higiene Laboral', cursorY);
-  cursorY += 8;
+  cursorY += lineStep;
 
   const profMNombre = data.profModulo ? `${data.profModulo.nombre} ${data.profModulo.apellido || ''}` : '';
   writeLabel('DOCENTE: ', profMNombre, cursorY);
-  cursorY += 8;
+  cursorY += lineStep;
 
   writeLabel('FECHA INFORME: ', data.fecha, cursorY);
-  cursorY += 8;
+  cursorY += lineStep;
 
   writeLabel('CANTIDAD DE ESTUDIANTES: ', String(data.totalEstudiantes), cursorY);
-  cursorY += 8;
+  cursorY += lineStep;
 
   doc.setFont('helvetica', 'bold');
   doc.text(`VARONES: ${data.varones}`, marginX, cursorY);
   doc.text(`MUJERES: ${data.mujeres}`, marginX + 60, cursorY);
-  cursorY += 14;
+  cursorY += 10;
 
   let txt1 = '';
   let txt2 = '';
@@ -360,41 +362,41 @@ async function generarInformePDF(data) {
   }
 
   // ========== SECCIÓN 1 ==========
-  doc.setFontSize(12);
+  doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
   doc.text('CARACTERÍSTICAS DEL GRUPO', marginX, cursorY);
-  cursorY += 6;
+  cursorY += 5;
 
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   const maxTextWidth = pageWidth - (marginX * 2);
   const lines1 = doc.splitTextToSize(txt1, maxTextWidth);
   doc.text(lines1, marginX, cursorY);
-  cursorY += (lines1.length * 5) + 6;
+  cursorY += (lines1.length * 4) + 6;
 
   // ========== SECCIÓN 2 ==========
-  doc.setFontSize(12);
+  doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
   doc.text('EL GRUPO EN RELACIÓN CON LOS CONTENIDOS TRABAJADOS', marginX, cursorY);
-  cursorY += 6;
+  cursorY += 5;
 
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   const lines2 = doc.splitTextToSize(txt2, maxTextWidth);
   doc.text(lines2, marginX, cursorY);
-  cursorY += (lines2.length * 5) + 6;
+  cursorY += (lines2.length * 4) + 6;
 
   // ========== SECCIÓN 3 — Apreciación ==========
-  doc.setFontSize(12);
+  doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
   doc.text('APRECIACIÓN:', marginX, cursorY);
-  cursorY += 6;
+  cursorY += 5;
 
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   const lines3 = doc.splitTextToSize(txt3, maxTextWidth);
   doc.text(lines3, marginX, cursorY);
-  cursorY += (lines3.length * 5) + 16;
+  cursorY += (lines3.length * 4) + 12;
 
   // ========== FIRMAS ==========
   // Verificar si entramos en la página, si no, nueva página
