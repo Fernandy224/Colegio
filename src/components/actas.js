@@ -282,83 +282,10 @@ async function generarPDF(data) {
     putOnlyUsedFonts: true
   });
 
-  // Helper function to load images cleanly as Data URL and get natural dimensions
-  const loadImageDataURL = async (src) => {
-    try {
-      const resp = await fetch(src);
-      if (!resp.ok) return null;
-      
-      // Vite may return index.html (200 OK) for missing files. We MUST check it's actually an image.
-      const contentType = resp.headers.get('content-type');
-      if (!contentType || !contentType.startsWith('image/')) return null;
-
-      const blob = await resp.blob();
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const img = new Image();
-          img.onload = () => {
-            resolve({
-              data: reader.result,
-              type: contentType === 'image/jpeg' || contentType === 'image/jpg' ? 'JPEG' : 'PNG',
-              width: img.width,
-              height: img.height
-            });
-          };
-          img.onerror = () => resolve(null);
-          img.src = reader.result;
-        };
-        reader.readAsDataURL(blob);
-      });
-    } catch (err) {
-      return null;
-    }
-  };
-
-  // Cargar imagen del encabezado
-  const encabezado = await loadImageDataURL('/imagenes/encabezado-acta.png');
-
   // Ancho completo de la página A4 en mm = 210
   const pageWidth = doc.internal.pageSize.getWidth();
-  const marginX = 14; // Solo para el texto (NO para la imagen)
-  const marginTop = 10; // Margen superior antes del encabezado
-  let cursorY = marginTop;
-
-  // ========== ENCABEZADO BANNER ==========
-  if (encabezado && encabezado.data) {
-    const imgWidth = pageWidth; // 100% del ancho de la hoja
-    const aspect = encabezado.height / encabezado.width;
-    const imgHeight = imgWidth * aspect;
-    
-    // Imagen con margen superior
-    doc.addImage(encabezado.data, encabezado.type, 0, marginTop, imgWidth, imgHeight);
-    
-    // ===== Sobreescribir el año "2025" con el año actual =====
-    const currentYear = new Date().getFullYear();
-    // La zona del año está aprox. al 78% del ancho desde la izquierda
-    const yearX = pageWidth * 0.78;
-    const yearY = marginTop + (imgHeight * 0.2); // Parte superior del tercio derecho
-    const rectW = 28;
-    const rectH = 7;
-    
-    // Dibujar rectángulo blanco para tapar el "2025"
-    doc.setFillColor(255, 255, 255);
-    doc.rect(yearX, yearY, rectW, rectH, 'F');
-    
-    // Escribir año actual encima
-    doc.setFontSize(13);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(40, 40, 40);
-    doc.text(`AÑO: ${currentYear}`, yearX + (rectW / 2), yearY + 5, { align: 'center' });
-    
-    // Resetear color de texto
-    doc.setTextColor(0, 0, 0);
-    
-    // El contenido arranca debajo con margen
-    cursorY = marginTop + imgHeight + 8;
-  } else {
-    cursorY = 20;
-  }
+  const marginX = 14; // Solo para el texto
+  let cursorY = 20; // Margen superior
 
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');

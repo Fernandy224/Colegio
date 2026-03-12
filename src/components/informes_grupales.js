@@ -188,69 +188,9 @@ async function generarInformePDF(data) {
     putOnlyUsedFonts: true
   });
 
-  // Helper function to load images cleanly as Data URL and get natural dimensions
-  const loadImageDataURL = async (src) => {
-    try {
-      const resp = await fetch(src);
-      if (!resp.ok) return null;
-      const contentType = resp.headers.get('content-type');
-      if (!contentType || !contentType.startsWith('image/')) return null;
-      const blob = await resp.blob();
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const img = new Image();
-          img.onload = () => {
-            resolve({
-              data: reader.result,
-              type: contentType === 'image/jpeg' || contentType === 'image/jpg' ? 'JPEG' : 'PNG',
-              width: img.width,
-              height: img.height
-            });
-          };
-          img.onerror = () => resolve(null);
-          img.src = reader.result;
-        };
-        reader.readAsDataURL(blob);
-      });
-    } catch (err) {
-      return null;
-    }
-  };
-
-  // Cargar imagen del encabezado (misma que las actas)
-  const encabezado = await loadImageDataURL('/imagenes/encabezado-acta.png');
-
   const pageWidth = doc.internal.pageSize.getWidth();
   const marginX = 14;
-  const marginTop = 10;
-  let cursorY = marginTop;
-
-  // ========== ENCABEZADO BANNER ==========
-  if (encabezado && encabezado.data) {
-    const imgWidth = pageWidth;
-    const aspect = encabezado.height / encabezado.width;
-    const imgHeight = imgWidth * aspect;
-    doc.addImage(encabezado.data, encabezado.type, 0, marginTop, imgWidth, imgHeight);
-
-    // Sobreescribir el año con el año actual
-    const currentYear = new Date().getFullYear();
-    const yearX = pageWidth * 0.78;
-    const yearY = marginTop + (imgHeight * 0.2);
-    const rectW = 28;
-    const rectH = 7;
-    doc.setFillColor(255, 255, 255);
-    doc.rect(yearX, yearY, rectW, rectH, 'F');
-    doc.setFontSize(13);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(40, 40, 40);
-    doc.text(`AÑO: ${currentYear}`, yearX + (rectW / 2), yearY + 5, { align: 'center' });
-    doc.setTextColor(0, 0, 0);
-
-    cursorY = marginTop + imgHeight + 8;
-  } else {
-    cursorY = 20;
-  }
+  let cursorY = 20;
 
   // ========== TÍTULO ==========
   doc.setFontSize(14);
