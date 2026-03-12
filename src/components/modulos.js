@@ -17,6 +17,9 @@ export async function renderModulos() {
   let allModulos = await fetchAll('modulos');
   let modulos = allModulos.filter(m => !m.anio || m.anio === year);
   const trayectos = await fetchAll('trayectos_formativos');
+  const profesores = await fetchAll('profesores');
+  const myProfesor = profesores.find(p => p.auth_id === authUser?.id);
+  const asignaciones = await fetchAll('asignaciones_profesor');
 
   // Agrupar modulos por trayecto_id
   const groupedModules = {};
@@ -61,7 +64,7 @@ export async function renderModulos() {
               </div>
               <div class="cards-grid compact">
                 ${mods.map(mod => {
-      const isOwner = isAdmin || !mod.created_by || mod.created_by === authUser?.id;
+      const isOwner = isAdmin || (tray && tray.profesor_id === myProfesor?.id) || (tray && asignaciones.some(a => a.trayecto_id === tray.id && a.profesor_id === myProfesor?.id));
       return `
                     <div class="card compact" data-id="${mod.id}">
                       <div class="card-actions">

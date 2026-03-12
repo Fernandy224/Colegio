@@ -395,3 +395,148 @@ async function generarInformePDF(data) {
   const trayNombre = data.trayecto ? data.trayecto.nombre.replace(/\s+/g, '_') : 'informe';
   doc.save(`Informe_Grupal_${trayNombre}.pdf`);
 }
+
+// ============================================
+// Informe Grupal desde vista de Trayecto Formativo
+// ============================================
+export async function openInformeGrupalTrayecto(trayectoId) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:700px;width:95vw;">
+      <div class="modal-header">
+        <h3 class="modal-title">📊 Informe Grupal</h3>
+        <button class="modal-close" id="modal-close-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" id="informe-tray-body">
+        <div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando datos...</div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#modal-close-btn').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  try {
+    const trayectos = await fetchAll('trayectos_formativos');
+    const trayecto = trayectos.find(t => t.id === trayectoId);
+    if (!trayecto) { showToast('Trayecto no encontrado', 'error'); overlay.remove(); return; }
+
+    const profesores = await fetchAll('profesores');
+    const inscripciones = await fetchAll('inscripciones');
+    const estudiantes = await fetchAll('estudiantes');
+    const submodulos = await fetchAll('submodulos');
+    const tmcLinks = await fetchAll('trayecto_modulo_comun');
+
+    const profTrayecto = trayecto.profesor_id ? profesores.find(p => p.id === trayecto.profesor_id) : null;
+
+    // Buscar módulo transversal de Higiene y Seguridad vinculado a este trayecto
+    const comunLinks = tmcLinks.filter(l => l.trayecto_id === trayectoId);
+    const modulosComunes = comunLinks.map(l => submodulos.find(s => s.id === l.submodulo_id)).filter(Boolean);
+    const modHigiene = modulosComunes.find(m => m.nombre && m.nombre.toLowerCase().includes('higiene'));
+    const profModulo = modHigiene && modHigiene.profesor_id ? profesores.find(p => p.id === modHigiene.profesor_id) : null;
+
+    // Estudiantes inscriptos en este trayecto
+    const insRelev = inscripciones.filter(i => i.trayecto_id === trayectoId);
+    const estIds = insRelev.map(i => i.estudiante_id);
+    const estAsociados = estudiantes.filter(e => estIds.includes(e.id));
+    const varones = estAsociados.filter(e => e.genero === 'Masculino').length;
+    const mujeres = estAsociados.filter(e => e.genero === 'Femenino').length;
+    const total = estAsociados.length;
+
+    const hoy = new Date();
+    const fechaHoy = `${hoy.getDate().toString().padStart(2, '0')}/${(hoy.getMonth() + 1).toString().padStart(2, '0')}/${hoy.getFullYear()}`;
+
+    const body = overlay.querySelector('#informe-tray-body');
+    body.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div style="font-size:0.85rem;color:var(--text-secondary);padding:8px 12px;background:rgba(139,92,246,0.06);border-radius:8px;border-left:3px solid var(--accent-purple);">
+          <strong>${sanitize(trayecto.nombre)}</strong><br>
+          ${profTrayecto ? `Prof. ${sanitize(profTrayecto.nombre)} ${sanitize(profTrayecto.apellido || '')}` : 'Sin profesor'}
+        </div>
+
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:100px;padding:10px 14px;background:rgba(139,92,246,0.08);border-radius:8px;text-align:center;">
+            <div style="font-size:1.3rem;font-weight:700;color:var(--accent-purple-light);">${total}</div>
+            <div style="font-size:0.7rem;color:var(--text-muted);">Estudiantes</div>
+          </div>
+          <div style="flex:1;min-width:100px;padding:10px 14px;background:rgba(59,130,246,0.08);border-radius:8px;text-align:center;">
+            <div style="font-size:1.3rem;font-weight:700;color:#60a5fa;">${varones}</div>
+            <div style="font-size:0.7rem;color:var(--text-muted);">Varones</div>
+          </div>
+          <div style="flex:1;min-width:100px;padding:10px 14px;background:rgba(236,72,153,0.08);border-radius:8px;text-align:center;">
+            <div style="font-size:1.3rem;font-weight:700;color:#f472b6;">${mujeres}</div>
+            <div style="font-size:0.7rem;color:var(--text-muted);">Mujeres</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Fecha del informe</label>
+          <input type="text" class="form-input" id="inf-tray-fecha" value="${fechaHoy}" placeholder="DD/MM/AAAA" />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Sección 1 — Características del grupo</label>
+          <textarea class="form-input" id="inf-tray-caract" rows="4" placeholder="Describir las características del grupo de estudiantes..." style="resize:vertical;min-height:80px;"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Sección 2 — El grupo en relación con los contenidos trabajados</label>
+          <textarea class="form-input" id="inf-tray-contenidos" rows="4" placeholder="Describir la relación del grupo con los contenidos..." style="resize:vertical;min-height:80px;"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Sección 3 — Estado del trayecto</label>
+          <select class="form-select" id="inf-tray-estado">
+            <option value="completado">Contenido completo</option>
+            <option value="en_desarrollo">Contenido en proceso</option>
+          </select>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px;">
+          <button class="btn btn-primary" id="btn-generar-informe-tray">📥 Generar PDF</button>
+        </div>
+      </div>
+    `;
+
+    body.querySelector('#btn-generar-informe-tray').addEventListener('click', async () => {
+      const caracteristicas = document.getElementById('inf-tray-caract').value.trim();
+      const contenidos = document.getElementById('inf-tray-contenidos').value.trim();
+      const estado = document.getElementById('inf-tray-estado').value;
+      const fecha = document.getElementById('inf-tray-fecha').value.trim();
+
+      if (!caracteristicas || !contenidos) {
+        showToast('Completá las secciones 1 y 2 del informe', 'error');
+        return;
+      }
+
+      try {
+        await generarInformePDF({
+          trayecto,
+          profTrayecto,
+          modulo: modHigiene || null,
+          profModulo,
+          fecha,
+          totalEstudiantes: total,
+          varones,
+          mujeres,
+          caracteristicas,
+          contenidos,
+          estado
+        });
+        showToast('Informe grupal generado exitosamente');
+      } catch (err) {
+        showToast('Error al generar el informe: ' + err.message, 'error');
+      }
+    });
+
+  } catch (err) {
+    const body = overlay.querySelector('#informe-tray-body');
+    body.innerHTML = `<div style="padding:32px;text-align:center;color:var(--accent-red);">Error: ${err.message}</div>`;
+  }
+}

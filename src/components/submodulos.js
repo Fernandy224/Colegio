@@ -50,7 +50,7 @@ export async function renderSubmodulos() {
     return `
             <div class="card" data-id="${sub.id}" style="align-items: stretch; cursor: default; padding: 12px 14px;">
               <div class="card-actions">
-                ${(isAdmin || !sub.created_by || sub.created_by === authUser?.id || sub.profesor_id === myProfesor?.id) ? `
+                ${(isAdmin || sub.profesor_id === myProfesor?.id) ? `
                   <button class="card-action-btn edit-btn" data-id="${sub.id}" title="Editar">${icons.edit}</button>
                   <button class="card-action-btn delete card-action-btn-del" data-id="${sub.id}" title="Eliminar">${icons.trash}</button>
                 ` : `<span style="font-size:0.6rem;padding:3px 7px;border-radius:999px;background:rgba(139,92,246,0.12);color:var(--text-muted);white-space:nowrap;">Solo lectura</span>`}
@@ -80,6 +80,7 @@ export async function renderSubmodulos() {
                     Unidades (${subUnidades.length})
                   </span>
                   <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                    ${(isAdmin || sub.profesor_id === myProfesor?.id) ? `
                     <button class="btn btn-secondary ver-asistencia-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
                       📋 Asistencia
                     </button>
@@ -94,9 +95,12 @@ export async function renderSubmodulos() {
                       📊 Informe
                     </button>
                     ` : ''}
+                    ` : ''}
+                    ${(isAdmin || sub.profesor_id === myProfesor?.id) ? `
                     <button class="btn btn-secondary add-unidad-btn" data-subid="${sub.id}" style="padding: 4px 10px; font-size: 0.75rem; border-radius: 6px;">
                       ${icons.plus} Agregar
                     </button>
+                    ` : ''}
                   </div>
                 </div>
                 ${subUnidades.length === 0 ? `
@@ -107,10 +111,12 @@ export async function renderSubmodulos() {
                       <div class="unidad-item" data-uid="${u.id}">
                         <span class="unidad-orden">${u.orden || (idx + 1)}</span>
                         <span class="unidad-nombre">${sanitize(u.nombre)}</span>
+                        ${(isAdmin || sub.profesor_id === myProfesor?.id) ? `
                         <div class="unidad-actions">
                           <button class="unidad-action-btn edit-unidad-btn" data-uid="${u.id}" data-subid="${sub.id}" title="Editar">${icons.edit}</button>
                           <button class="unidad-action-btn delete del-unidad-btn" data-uid="${u.id}" title="Eliminar">${icons.trash}</button>
                         </div>
+                        ` : ''}
                       </div>
                     `).join('')}
                   </div>

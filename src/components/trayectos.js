@@ -39,6 +39,8 @@ async function renderTrayectosList() {
   const profesores = await fetchAll('profesores');
   const inscripciones = await fetchAll('inscripciones');
   const modulos = await fetchAll('modulos');
+  const asignaciones = await fetchAll('asignaciones_profesor');
+  const myProfesor = profesores.find(p => p.auth_id === authUser?.id);
 
   content.innerHTML = `
     <div class="section-header">
@@ -60,7 +62,7 @@ async function renderTrayectosList() {
     const prof = profesores.find(p => p.id === tray.profesor_id);
     const inscriptos = inscripciones.filter(i => i.trayecto_id === tray.id);
     const modulosTray = modulos.filter(m => m.trayecto_id === tray.id);
-    const isOwner = isAdmin || !tray.created_by || tray.created_by === authUser?.id;
+    const isOwner = isAdmin || tray.profesor_id === myProfesor?.id || asignaciones.some(a => a.trayecto_id === tray.id && a.profesor_id === myProfesor?.id);
     return `
             <div class="card trayecto-card" data-id="${tray.id}" style="cursor: pointer; align-items: stretch;">
               <div class="card-actions">
@@ -235,6 +237,9 @@ async function renderTrayectoDetail(trayectoId) {
   const currentProfesorId = authUser?.role === 'profesor'
     ? profesores.find(p => p.auth_id === authUser.id)?.id || null
     : null; // null = admin = sin restricciones
+  const isAdmin = authUser?.role === 'administrador';
+  const isMainOwner = isAdmin || trayecto.profesor_id === currentProfesorId;
+  const isOwner = isMainOwner || asignacionesTray.some(a => a.profesor_id === currentProfesorId);
 
   // Estudiantes inscriptos
   const inscriptoData = thisInscripciones.map(insc => {
@@ -268,10 +273,15 @@ async function renderTrayectoDetail(trayectoId) {
       </div>
       <div class="section-actions">
         <button class="btn btn-secondary" id="btn-docs">${icons.document} Documentos</button>
+        <button class="btn btn-secondary" id="btn-informe-grupal">📊 Informe Grupal</button>
+        ${isOwner ? `
         <button class="btn btn-secondary" id="btn-vincular-comun">${icons.plus} Vincular Mód. Común</button>
         <button class="btn btn-secondary" id="btn-asignar-profesor">${icons.professors} Asignar Profesor</button>
+        ` : ''}
+        ${isMainOwner ? `
         <button class="btn btn-secondary" id="btn-importar-csv">📥 Importar CSV</button>
         <button class="btn btn-add" id="btn-inscribir">${icons.plus} Inscribir Estudiante</button>
+        ` : ''}
       </div>
     </div>
 
@@ -286,7 +296,7 @@ async function renderTrayectoDetail(trayectoId) {
 
     <!-- Tab Content -->
     <div id="tab-content">
-      ${renderSeguimientoTab(inscriptoData, allModulosTray, seguimiento)}
+      ${renderSeguimientoTab(inscriptoData, allModulosTray, seguimiento, isOwner, isMainOwner)}
     </div>
 
     <style>
@@ -352,10 +362,12 @@ async function renderTrayectoDetail(trayectoId) {
                 ${p.especialidad ? `<div style="font-size:0.7rem;color:var(--text-muted);">${sanitize(p.especialidad)}</div>` : ''}
               </div>
             </div>
+            ${isMainOwner ? `
             <button class="card-action-btn delete" title="Desvincular"
               onclick="window.desvincularProfesor('${asignacionesTray.find(a => a.profesor_id === p.id)?.id}')" style="opacity:1;">
               ${icons.trash}
             </button>
+            ` : ''}
           </div>
         `).join('')
     }
@@ -408,8 +420,8 @@ async function renderTrayectoDetail(trayectoId) {
       const tabId = tab.dataset.tab;
       const tabContent = document.getElementById('tab-content');
       if (tabId === 'seguimiento') {
-        tabContent.innerHTML = renderSeguimientoTab(inscriptoData, allModulosTray, seguimiento);
-        bindSeguimientoEvents(inscriptoData, allModulosTray, unidades, currentProfesorId);
+        tabContent.innerHTML = renderSeguimientoTab(inscriptoData, allModulosTray, seguimiento, isOwner, isMainOwner);
+        bindSeguimientoEvents(inscriptoData, allModulosTray, unidades, currentProfesorId, isOwner);
       } else if (tabId === 'comparativa') {
         tabContent.innerHTML = renderComparativaTab(inscriptoData, allModulosTray, seguimiento);
       } else if (tabId === 'historial') {
@@ -449,6 +461,12 @@ async function renderTrayectoDetail(trayectoId) {
     openAsignarProfesorModal(trayectoId, profesores, asignacionesTray);
   });
 
+  // Informe Grupal
+  document.getElementById('btn-informe-grupal')?.addEventListener('click', async () => {
+    const { openInformeGrupalTrayecto } = await import('./informes_grupales.js');
+    await openInformeGrupalTrayecto(trayectoId);
+  });
+
   // Desvincular profesor (global)
   window.desvincularProfesor = async (asignacionId) => {
     if (!asignacionId) return;
@@ -460,13 +478,13 @@ async function renderTrayectoDetail(trayectoId) {
     } catch (err) { showToast('Error: ' + err.message, 'error'); }
   };
 
-  bindSeguimientoEvents(inscriptoData, allModulosTray, unidades, currentProfesorId);
+  bindSeguimientoEvents(inscriptoData, allModulosTray, unidades, currentProfesorId, isOwner);
 }
 
 // ============================================
 // TAB: SEGUIMIENTO ACADÉMICO
 // ============================================
-function renderSeguimientoTab(inscriptoData, allModulosTray, seguimiento) {
+function renderSeguimientoTab(inscriptoData, allModulosTray, seguimiento, isOwner = false, isMainOwner = false) {
   if (inscriptoData.length === 0) {
     return `<div class="empty-state" style="padding: 32px;"><p class="empty-state-text">No hay estudiantes inscriptos. Usá el botón "Inscribir Estudiante".</p></div>`;
   }
@@ -510,8 +528,10 @@ function renderSeguimientoTab(inscriptoData, allModulosTray, seguimiento) {
                 <td>
                   <div style="display:flex;gap:4px;">
                     <button class="card-action-btn seg-detail-btn" data-inscid="${data.id}" title="Ver seguimiento" style="opacity:1;">${icons.trayectos}</button>
+                    ${isMainOwner ? `
                     <button class="card-action-btn estado-btn" data-inscid="${data.id}" title="Cambiar estado" style="opacity:1;">${icons.edit}</button>
                     <button class="card-action-btn delete desinscribir-btn" data-inscid="${data.id}" title="Desinscribir" style="opacity:1;">${icons.trash}</button>
+                    ` : ''}
                   </div>
                 </td>
               </tr>
@@ -523,12 +543,12 @@ function renderSeguimientoTab(inscriptoData, allModulosTray, seguimiento) {
   `;
 }
 
-function bindSeguimientoEvents(inscriptoData, allModulosTray, unidades, currentProfesorId = null) {
+function bindSeguimientoEvents(inscriptoData, allModulosTray, unidades, currentProfesorId = null, isOwner = false) {
   // Ver seguimiento detallado por estudiante
   document.querySelectorAll('.seg-detail-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const data = inscriptoData.find(d => d.id === btn.dataset.inscid);
-      if (data) openSeguimientoDetalleModal(data, allModulosTray, unidades, currentProfesorId);
+      if (data) openSeguimientoDetalleModal(data, allModulosTray, unidades, currentProfesorId, isOwner);
     });
   });
 
@@ -889,7 +909,7 @@ function openAsignarProfesorModal(trayectoId, profesores, asignacionesExistentes
   });
 }
 
-function openSeguimientoDetalleModal(inscripcionData, allModulosTray, unidades, currentProfesorId = null) {
+function openSeguimientoDetalleModal(inscripcionData, allModulosTray, unidades, currentProfesorId = null, isOwner = false) {
   // currentProfesorId: id del profesor en tabla 'profesores'. null = admin (sin restricciones).
   // Un módulo común es readonly si currentProfesorId != null Y módulo.profesor_id != currentProfesorId
   const est = inscripcionData.estudiante;
@@ -910,6 +930,16 @@ function openSeguimientoDetalleModal(inscripcionData, allModulosTray, unidades, 
     const fecha = seg?.fecha_aprobacion || '';
     const docente = seg?.docente_evaluador || '';
 
+    // Determinar si este módulo es readonly para el profesor actual
+    let isReadonly = false;
+    if (currentProfesorId !== null) { // No es admin
+      if (m.tipo === 'Específico') {
+        isReadonly = !isOwner;
+      } else { // Común
+        isReadonly = m.profesor_id !== currentProfesorId;
+      }
+    }
+
     let unidadesHTML = '';
     if (m.tipo === 'Común' && unidades) {
       const modUnidades = unidades.filter(u => u.submodulo_id === m.refId).sort((a, b) => (a.orden || 0) - (b.orden || 0));
@@ -925,6 +955,16 @@ function openSeguimientoDetalleModal(inscripcionData, allModulosTray, unidades, 
           const uNota = segU?.nota || '';
           const uFecha = segU?.fecha_aprobacion || '';
           const uDocente = segU?.docente_evaluador || '';
+          
+          if (isReadonly) {
+            return `
+                <div style="margin-bottom:12px; padding-left:12px; border-left: 2px solid var(--accent-purple); background: rgba(0,0,0,0.15); padding-top:8px; padding-bottom:8px; padding-right:8px; border-radius:4px;">
+                  <div style="font-size:0.8rem; margin-bottom:6px; color: var(--text-primary);"><strong>${u.orden ? u.orden + '. ' : ''}${sanitize(u.nombre)}</strong></div>
+                  <div style="font-size:0.8rem;color:var(--text-secondary);">Estado: <strong>${uEstado}</strong>${uNota ? ` · Nota: <strong>${uNota}</strong>` : ''}</div>
+                </div>
+            `;
+          }
+
           return `
                 <div style="margin-bottom:12px; padding-left:12px; border-left: 2px solid var(--accent-purple); background: rgba(0,0,0,0.15); padding-top:8px; padding-bottom:8px; padding-right:8px; border-radius:4px;">
                   <div style="font-size:0.8rem; margin-bottom:6px; color: var(--text-primary);"><strong>${u.orden ? u.orden + '. ' : ''}${sanitize(u.nombre)}</strong></div>
@@ -946,14 +986,6 @@ function openSeguimientoDetalleModal(inscripcionData, allModulosTray, unidades, 
         `;
       }
     }
-
-    // Determinar si este módulo es readonly para el profesor actual
-    const isReadonly = currentProfesorId !== null && m.tipo !== 'Específico' &&
-      (m.profesor_id ? m.profesor_id !== currentProfesorId : true);
-    // isReadonly = true cuando:
-    // - Hay un profesor logueado (currentProfesorId != null)
-    // - El módulo es Común
-    // - Y el profesor_id del módulo es distinto del profesor actual (o no tiene asignado)
 
     return `
           <div style="padding:14px;border:1px solid ${isReadonly ? 'rgba(139,92,246,0.2)' : 'var(--border-color)'};border-radius:10px;margin-bottom:12px;background:var(--bg-input);">
@@ -1025,10 +1057,17 @@ function openSeguimientoDetalleModal(inscripcionData, allModulosTray, unidades, 
 
   const footerHTML = `
     <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+    <button class="btn btn-primary" id="modal-save" style="display: ${isOwner || currentProfesorId === null ? 'block' : 'none'}">Guardar Todo</button>
+  `;
+
+  // Wait, if a common module is editable by a teacher who is NOT the trayecto owner, they still need "Guardar Todo".
+  // So instead: We should always show "Guardar Todo" if there is at least ONE module that is NOT readonly. Wait, the modal has the class logic below. Let me just restore the modal save button:
+  const footerHTMLFinal = `
+    <button class="btn btn-secondary" id="modal-cancel">Cancelar / Cerrar</button>
     <button class="btn btn-primary" id="modal-save">Guardar Todo</button>
   `;
 
-  const overlay = createModal('Seguimiento Académico', formHTML, footerHTML);
+  const overlay = createModal('Seguimiento Académico', formHTML, footerHTMLFinal);
 
   // Conectar los botones de estado (pills) con el select oculto
   overlay.querySelectorAll('.estado-pill-btn').forEach(btn => {
