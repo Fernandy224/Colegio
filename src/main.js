@@ -23,6 +23,12 @@ let appStarted = false; // Guard: evita doble inicialización
 // Manejador global de errores para diagnóstico
 window.onerror = function (msg, url, lineNo, columnNo, error) {
     console.error('CRITICAL:', msg, url, lineNo, error);
+    
+    // Si la app ya arrancó correctamente, ignoramos errores de fondo
+    // que suelen ocurrir (ej. fallas de red al cambiar de pestaña)
+    // para no matar la UI del usuario con una pantalla negra.
+    if (appStarted) return false; 
+
     const app = document.getElementById('app');
     if (app) {
         app.innerHTML = `
@@ -30,9 +36,9 @@ window.onerror = function (msg, url, lineNo, columnNo, error) {
                 <div style="font-size:3rem; margin-bottom:20px;">⚠️</div>
                 <h1 style="margin-bottom:10px;">Error Crítico de Carga</h1>
                 <p style="color:#8b8da3; max-width:500px; margin-bottom:30px;">
-                    El sistema encontró un error al iniciar. Esto puede deberse a datos antiguos en el navegador o a un problema de conexión.
+                    El sistema encontró un error al iniciar. Esto puede deberse a datos antiguos en el navegador o a un problema temporal de conexión.
                 </p>
-                <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:8px; font-family:monospace; font-size:0.8rem; margin-bottom:30px; text-align:left; border:1px solid rgba(239,68,68,0.2);">
+                <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:8px; font-family:monospace; font-size:0.8rem; margin-bottom:30px; text-align:left; border:1px solid rgba(239,68,68,0.2); max-width:90%; overflow-x:auto;">
                     ${msg}
                 </div>
                 <button onclick="localStorage.clear(); sessionStorage.clear(); location.reload();" 
