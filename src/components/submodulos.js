@@ -5,7 +5,6 @@ import { getContentArea, getPanelRight } from './layout.js';
 import { icons, showToast, createModal, confirmDialog, sanitize } from '../utils/helpers.js';
 import { fetchAll, create, update, remove } from '../utils/data.js';
 import { getCurrentUser } from './auth.js';
-import { renderAsistenciaTab, bindAsistenciaEvents } from './asistencia.js';
 
 let expandedCard = null; // ID del módulo común expandido para ver unidades
 
@@ -19,7 +18,6 @@ export async function renderSubmodulos() {
   const profesores = await fetchAll('profesores');
   const authUser = getCurrentUser();
   const isAdmin = authUser?.role === 'administrador';
-  // Perfil de profesor del usuario actual (para verificar si es responsable)
   const myProfesor = profesores.find(p => p.auth_id === authUser?.id);
 
   content.innerHTML = `
@@ -45,7 +43,6 @@ export async function renderSubmodulos() {
     const subUnidades = unidades
       .filter(u => u.submodulo_id === sub.id)
       .sort((a, b) => (a.orden || 0) - (b.orden || 0));
-    const isExpanded = expandedCard === sub.id;
 
     return `
             <div class="card" data-id="${sub.id}" style="align-items: stretch; cursor: default; padding: 12px 14px;">
@@ -68,7 +65,7 @@ export async function renderSubmodulos() {
                 <div style="min-width: 0; flex: 1;">
                   <div class="card-name" style="text-align: left; font-size: 0.85rem;">${sanitize(sub.nombre)}</div>
                   <div class="card-subtitle" style="text-align: left; margin-top: 1px; font-size: 0.65rem;">Mód. Específico: ${mod ? sanitize(mod.nombre) : 'Sin módulo'}</div>
-                  ${(() => { const prof = profesores.find(p => p.id === sub.profesor_id); return prof ? `<div style="font-size:0.7rem;color:var(--accent-purple-light);margin-top:2px;">Prof. a cargo: ${sanitize(prof.nombre)} ${sanitize(prof.apellido || '')}</div>` : '<div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">Sin profesor asignado</div>'; })()} 
+                  ${(() => { const prof = profesores.find(p => p.id === sub.profesor_id); return prof ? `<div style="font-size:0.7rem;color:var(--accent-purple-light);margin-top:2px;">Prof. a cargo: ${sanitize(prof.nombre)} ${sanitize(prof.apellido || '')}</div>` : '<div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">Sin profesor asignado</div>'; })()}
                   ${sub.descripcion ? `<div style="font-size:0.7rem;color:var(--text-secondary);margin-top:4px; max-width: 100%; white-space: normal; overflow-wrap: anywhere;">${sanitize(sub.descripcion)}</div>` : ''}
                 </div>
               </div>
@@ -227,10 +224,8 @@ export async function renderSubmodulos() {
 
   // === Eventos ===
 
-  // Agregar módulo común
   document.getElementById('btn-add-submodulo')?.addEventListener('click', () => openSubmoduloModal(null, modulos, profesores));
 
-  // Editar módulo común
   content.querySelectorAll('.edit-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -239,14 +234,12 @@ export async function renderSubmodulos() {
     });
   });
 
-  // Eliminar módulo común
   content.querySelectorAll('.card-action-btn-del').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const sub = submodulos.find(s => s.id === btn.dataset.id);
       if (sub) {
         confirmDialog(`¿Eliminar el módulo común <strong>${sanitize(sub.nombre)}</strong>? Esto también eliminará sus unidades.`, async () => {
-          // Eliminar unidades asociadas primero (en modo local)
           const subUnidades = unidades.filter(u => u.submodulo_id === sub.id);
           for (const u of subUnidades) {
             await remove('unidades', u.id);
@@ -259,7 +252,6 @@ export async function renderSubmodulos() {
     });
   });
 
-  // Ver asistencia de módulo común
   content.querySelectorAll('.ver-asistencia-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -269,7 +261,6 @@ export async function renderSubmodulos() {
     });
   });
 
-  // Evaluar módulo común
   content.querySelectorAll('.evaluar-submodulo-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -279,7 +270,6 @@ export async function renderSubmodulos() {
     });
   });
 
-  // Generar Acta
   content.querySelectorAll('.acta-submodulo-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -290,7 +280,6 @@ export async function renderSubmodulos() {
     });
   });
 
-  // Generar Informe Grupal
   content.querySelectorAll('.informe-grupal-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -301,7 +290,6 @@ export async function renderSubmodulos() {
     });
   });
 
-  // Agregar unidad
   content.querySelectorAll('.add-unidad-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -312,7 +300,6 @@ export async function renderSubmodulos() {
     });
   });
 
-  // Editar unidad
   content.querySelectorAll('.edit-unidad-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -321,7 +308,6 @@ export async function renderSubmodulos() {
     });
   });
 
-  // Eliminar unidad
   content.querySelectorAll('.del-unidad-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -464,7 +450,6 @@ function openUnidadModal(unidad, submoduloId, defaultOrden = 1) {
 // MODAL: PLANILLA DE ASISTENCIA MÓDULO COMÚN
 // ============================================
 async function openAsistenciaModuloModal(submoduloId, submoduloNombre) {
-  // Overlay de carga inicial
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -488,7 +473,6 @@ async function openAsistenciaModuloModal(submoduloId, submoduloNombre) {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
   try {
-    // Obtener trayectos que tienen este módulo común vinculado
     const tmcLinks = await fetchAll('trayecto_modulo_comun');
     const trayectosIds = tmcLinks
       .filter(l => l.submodulo_id === submoduloId)
@@ -504,9 +488,7 @@ async function openAsistenciaModuloModal(submoduloId, submoduloNombre) {
       return;
     }
 
-    // Obtener inscripciones de esos trayectos
     const inscripciones = await fetchAll('inscripciones');
-    // Obtener estudiantes únicos
     const estudiantes = await fetchAll('estudiantes');
 
     const tabsHTML = trayectosAsociados.map((t, idx) => `
@@ -560,16 +542,17 @@ async function openAsistenciaModuloModal(submoduloId, submoduloNombre) {
 }
 
 // ============================================
-// MODAL: EVALUACIÓN / SEGUIMIENTO MÓDULO COMÚN
+// MODAL: EVALUACIÓN MÓDULO COMÚN — POR UNIDAD
+// Guarda en seguimiento_unidades (inscripcion_id + unidad_id)
+// Se refleja en cada trayecto via tabs
 // ============================================
 async function openEvaluacionModuloModal(submoduloId, submoduloNombre) {
-  // Overlay de carga inicial
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal" style="max-width:1050px;width:95vw;">
       <div class="modal-header">
-        <h3 class="modal-title">📝 Evaluación — ${submoduloNombre}</h3>
+        <h3 class="modal-title">📝 Evaluación por Unidad — ${submoduloNombre}</h3>
         <button class="modal-close" id="modal-close-btn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
@@ -577,7 +560,7 @@ async function openEvaluacionModuloModal(submoduloId, submoduloNombre) {
         </button>
       </div>
       <div class="modal-body" id="evaluacion-modal-body">
-        <div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando estudiantes...</div>
+        <div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando...</div>
       </div>
     </div>
   `;
@@ -587,136 +570,185 @@ async function openEvaluacionModuloModal(submoduloId, submoduloNombre) {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
   try {
-    const tmcLinks = await fetchAll('trayecto_modulo_comun');
+    const [tmcLinks, todosTrayectos, inscripciones, estudiantes, todasUnidades, todosSubmodulos, todosProfesores] = await Promise.all([
+      fetchAll('trayecto_modulo_comun'),
+      fetchAll('trayectos_formativos'),
+      fetchAll('inscripciones'),
+      fetchAll('estudiantes'),
+      fetchAll('unidades'),
+      fetchAll('submodulos'),
+      fetchAll('profesores'),
+    ]);
+
+    const currentSub = todosSubmodulos.find(s => s.id === submoduloId);
+    const profResponsable = currentSub ? todosProfesores.find(p => p.id === currentSub.profesor_id) : null;
+    const nombreResponsable = profResponsable ? (profResponsable.nombre + ' ' + (profResponsable.apellido || '')) : '';
+
     const trayectosIds = tmcLinks.filter(l => l.submodulo_id === submoduloId).map(l => l.trayecto_id);
-    const todosTrayectos = await fetchAll('trayectos_formativos');
     const trayectosAsociados = todosTrayectos.filter(t => trayectosIds.includes(t.id));
 
     const body = overlay.querySelector('#evaluacion-modal-body');
 
     if (trayectosAsociados.length === 0) {
-      body.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-muted);">Este módulo no está asociado a ningún trayecto formativo.</div>`;
+      body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Este módulo no está asociado a ningún trayecto formativo.</div>';
       return;
     }
 
-    const inscripciones = await fetchAll('inscripciones');
-    const estudiantes = await fetchAll('estudiantes');
-    let seguimiento = await fetchAll('seguimiento_modulos');
+    const subUnidades = todasUnidades
+      .filter(u => u.submodulo_id === submoduloId)
+      .sort((a, b) => (a.orden || 0) - (b.orden || 0));
 
-    const tabsHTML = trayectosAsociados.map((t, idx) => `
-      <button class="content-tab ${idx === 0 ? 'active' : ''}" data-trayectoid="${t.id}">${sanitize(t.nombre)}</button>
-    `).join('');
+    const tabsHTML = trayectosAsociados.map((t, idx) =>
+      '<button class="content-tab ' + (idx === 0 ? 'active' : '') + '" data-trayectoid="' + t.id + '">' + sanitize(t.nombre) + '</button>'
+    ).join('');
 
-    body.innerHTML = `
-      <div class="content-tabs" style="margin-bottom: 20px;">
-        ${tabsHTML}
-      </div>
-      <div id="modulo-eval-tab-content">
-        <div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando...</div>
-      </div>
-    `;
+    body.innerHTML =
+      '<div class="content-tabs" style="margin-bottom:20px;">' + tabsHTML + '</div>' +
+      '<div id="modulo-eval-tab-content"><div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando...</div></div>';
 
     const tabContent = body.querySelector('#modulo-eval-tab-content');
 
     const loadTab = async (trayectoId) => {
+      tabContent.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Cargando estudiantes del trayecto...</div>';
+
       const insRelev = inscripciones.filter(i => i.trayecto_id === trayectoId);
-      
+
       if (insRelev.length === 0) {
         tabContent.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">No hay inscriptos en este trayecto.</div>';
         return;
       }
-      
-      let rowsHTML = insRelev.map(insc => {
-        const est = estudiantes.find(e => e.id === insc.estudiante_id);
-        if (!est) return '';
-        
-        const seg = seguimiento.find(s => s.inscripcion_id === insc.id && s.submodulo_id === submoduloId);
-        const estado = seg?.estado || 'Pendiente';
-        const nota = seg?.nota || '';
-        const fecha = seg?.fecha_aprobacion ? seg.fecha_aprobacion.slice(0, 10) : '';
-        const docente = seg?.docente_evaluador || '';
-        
-        return `
-          <div class="eval-row" style="display:flex; align-items:center; gap: 12px; margin-bottom: 12px; padding: 12px; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px solid var(--border-color);">
-            <div style="flex: 1.5; min-width:180px;">
-              <div style="font-weight: 600;">${sanitize(est.nombre)} ${sanitize(est.apellido)}</div>
-              <div style="font-size: 0.75rem; color: var(--text-muted);">DNI: ${sanitize(est.dni)}</div>
-            </div>
-            <div style="flex: 1;">
-              <select class="form-select eval-estado" data-insc-id="${insc.id}" data-seg-id="${seg?.id || ''}" style="width: 100%; font-size: 0.8125rem;">
-                <option value="Pendiente" ${estado === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
-                <option value="En curso" ${estado === 'En curso' ? 'selected' : ''}>En curso</option>
-                <option value="Aprobado" ${estado === 'Aprobado' ? 'selected' : ''}>Aprobado</option>
-                <option value="Desaprobado" ${estado === 'Desaprobado' ? 'selected' : ''}>Desaprobado</option>
-              </select>
-            </div>
-            <div style="flex: 0.8;">
-              <input type="number" class="form-input eval-nota" data-insc-id="${insc.id}" value="${nota}" min="1" max="10" step="0.5" placeholder="Nota" style="width: 100%; font-size: 0.8125rem;" />
-            </div>
-            <div style="flex: 1.2;">
-              <input type="date" class="form-input eval-fecha" data-insc-id="${insc.id}" value="${fecha}" style="width: 100%; font-size: 0.8125rem;" />
-            </div>
-            <div style="flex: 1.5;">
-              <input type="text" class="form-input eval-docente" data-insc-id="${insc.id}" value="${sanitize(docente)}" placeholder="Docente Evaluador" style="width: 100%; font-size: 0.8125rem;" />
-            </div>
-          </div>
-        `;
-      }).join('');
-      
-      tabContent.innerHTML = `
-        <div class="eval-container" style="max-height: 55vh; overflow-y: auto;">
-          <div style="display:flex; gap: 12px; padding: 0 12px 6px; font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">
-            <div style="flex: 1.5; min-width:180px;">Estudiante</div>
-            <div style="flex: 1;">Estado</div>
-            <div style="flex: 0.8;">Nota</div>
-            <div style="flex: 1.2;">Fecha Aprob.</div>
-            <div style="flex: 1.5;">Docente Evaluador</div>
-          </div>
-          ${rowsHTML}
-        </div>
-        <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
-          <button class="btn btn-primary" id="btn-save-eval">Guardar Calificaciones</button>
-        </div>
-      `;
+      if (subUnidades.length === 0) {
+        tabContent.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">Este módulo no tiene unidades. Agregá unidades primero desde la tarjeta.</div>';
+        return;
+      }
+
+      const segUnidades = await fetchAll('seguimiento_unidades');
+      const unidadIds = subUnidades.map(u => u.id);
+      const inscIds = insRelev.map(i => i.id);
+      const segMap = {};
+      segUnidades
+        .filter(su => unidadIds.includes(su.unidad_id) && inscIds.includes(su.inscripcion_id))
+        .forEach(su => { segMap[su.inscripcion_id + '_' + su.unidad_id] = su; });
+
+      let unidadesHTML = '';
+      subUnidades.forEach(function(unidad, uIdx) {
+        let rowsHTML = '';
+        insRelev.forEach(function(insc) {
+          const est = estudiantes.find(function(e) { return e.id === insc.estudiante_id; });
+          if (!est) return;
+          const key = insc.id + '_' + unidad.id;
+          const seg = segMap[key];
+          const estado = (seg && seg.estado) ? seg.estado : 'Pendiente';
+          const nota = (seg && seg.nota != null) ? seg.nota : '';
+          const fecha = (seg && seg.fecha_aprobacion) ? seg.fecha_aprobacion.slice(0, 10) : '';
+          // Si no hay evaluador guardado, usamos el responsable del módulo
+          const docente = (seg && seg.docente_evaluador) ? seg.docente_evaluador : nombreResponsable;
+          const bgColor = estado === 'Aprobado' ? 'rgba(34,197,94,0.15)' :
+                          estado === 'Desaprobado' ? 'rgba(239,68,68,0.13)' :
+                          estado === 'En curso' ? 'rgba(251,191,36,0.13)' : 'rgba(139,92,246,0.09)';
+          const txtColor = estado === 'Aprobado' ? '#22c55e' :
+                           estado === 'Desaprobado' ? '#ef4444' :
+                           estado === 'En curso' ? '#fbbf24' : 'var(--text-muted)';
+
+          rowsHTML +=
+            '<div class="eval-row" data-insc-id="' + insc.id + '" data-unidad-id="' + unidad.id + '" data-seg-id="' + ((seg && seg.id) ? seg.id : '') + '"' +
+            ' style="display:flex;align-items:center;gap:10px;margin-bottom:7px;padding:9px 12px;background:rgba(255,255,255,0.02);border-radius:8px;border:1px solid var(--border-color);">' +
+              '<div style="flex:1.5;min-width:150px;">' +
+                '<div style="font-weight:600;font-size:0.84rem;">' + sanitize(est.nombre) + ' ' + sanitize(est.apellido) + '</div>' +
+                '<div style="font-size:0.69rem;color:var(--text-muted);">DNI: ' + sanitize(est.dni) + '</div>' +
+              '</div>' +
+              '<div style="flex:1;">' +
+                '<select class="form-select eval-estado" style="width:100%;font-size:0.8rem;background:' + bgColor + ';color:' + txtColor + ';border-color:' + txtColor + ';">' +
+                  '<option value="Pendiente"' + (estado === 'Pendiente' ? ' selected' : '') + '>Pendiente</option>' +
+                  '<option value="En curso"' + (estado === 'En curso' ? ' selected' : '') + '>En curso</option>' +
+                  '<option value="Aprobado"' + (estado === 'Aprobado' ? ' selected' : '') + '>Aprobado</option>' +
+                  '<option value="Desaprobado"' + (estado === 'Desaprobado' ? ' selected' : '') + '>Desaprobado</option>' +
+                '</select>' +
+              '</div>' +
+              '<div style="flex:0.75;">' +
+                '<input type="number" class="form-input eval-nota" value="' + nota + '" min="1" max="10" step="0.5" placeholder="Nota" style="width:100%;font-size:0.8rem;" />' +
+              '</div>' +
+              '<div style="flex:1.1;">' +
+                '<input type="date" class="form-input eval-fecha" value="' + fecha + '" style="width:100%;font-size:0.8rem;" />' +
+              '</div>' +
+              '<div style="flex:1.5;">' +
+                '<input type="text" class="form-input eval-docente" value="' + sanitize(docente) + '" placeholder="Docente evaluador" style="width:100%;font-size:0.8rem;" />' +
+              '</div>' +
+            '</div>';
+        });
+
+        const numOrden = unidad.orden || (uIdx + 1);
+        unidadesHTML +=
+          '<div class="unidad-eval-section" style="margin-bottom:14px;border:1px solid var(--border-color);border-radius:10px;overflow:hidden;">' +
+            '<div class="unidad-eval-header" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(139,92,246,0.08);cursor:pointer;user-select:none;"' +
+            ' onclick="(function(h){var s=h.closest(\'.unidad-eval-section\');var r=s.querySelector(\'.unidad-eval-rows\');var ic=h.querySelector(\'.chevron-icon\');r.classList.toggle(\'collapsed\');ic.style.transform=r.classList.contains(\'collapsed\')?\'rotate(-90deg)\':\'\'})(this)">' +
+              '<div style="width:26px;height:26px;border-radius:6px;background:var(--gradient-purple);color:#fff;display:flex;align-items:center;justify-content:center;font-size:0.74rem;font-weight:700;flex-shrink:0;">' + numOrden + '</div>' +
+              '<span style="font-weight:600;font-size:0.875rem;flex:1;">' + sanitize(unidad.nombre) + '</span>' +
+              '<span style="font-size:0.7rem;color:var(--text-muted);">' + insRelev.length + ' estudiante' + (insRelev.length !== 1 ? 's' : '') + '</span>' +
+              '<svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:var(--text-muted);transition:transform 0.25s;"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
+            '</div>' +
+            '<div class="unidad-eval-rows" style="padding:12px 14px;">' +
+              '<div style="display:flex;gap:10px;padding:0 0 6px;font-size:0.68rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;">' +
+                '<div style="flex:1.5;min-width:150px;">Estudiante</div>' +
+                '<div style="flex:1;">Estado</div>' +
+                '<div style="flex:0.75;">Nota</div>' +
+                '<div style="flex:1.1;">Fecha Aprob.</div>' +
+                '<div style="flex:1.5;">Docente Evaluador</div>' +
+              '</div>' +
+              rowsHTML +
+            '</div>' +
+          '</div>';
+      });
+
+      tabContent.innerHTML =
+        '<style>.unidad-eval-rows.collapsed{display:none}.unidad-eval-header:hover{background:rgba(139,92,246,0.14)!important}</style>' +
+        '<div class="eval-container" style="max-height:58vh;overflow-y:auto;padding-right:4px;">' + unidadesHTML + '</div>' +
+        '<div style="margin-top:16px;display:flex;justify-content:flex-end;gap:10px;align-items:center;">' +
+          '<span id="eval-status-msg" style="font-size:0.8rem;color:var(--text-muted);"></span>' +
+          '<button class="btn btn-primary" id="btn-save-eval">💾 Guardar Calificaciones</button>' +
+        '</div>';
 
       tabContent.querySelector('#btn-save-eval').addEventListener('click', async () => {
+        const btn = tabContent.querySelector('#btn-save-eval');
+        const statusMsg = tabContent.querySelector('#eval-status-msg');
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Guardando...';
         try {
           const rows = tabContent.querySelectorAll('.eval-row');
           for (const row of rows) {
-            const estadoSelect = row.querySelector('.eval-estado');
-            const inscId = estadoSelect.dataset.inscId;
-            const segId = estadoSelect.dataset.segId;
-            const estado = estadoSelect.value;
-            const nota = row.querySelector('.eval-nota').value ? parseFloat(row.querySelector('.eval-nota').value) : null;
+            const inscId = row.dataset.inscId;
+            const unidadId = row.dataset.unidadId;
+            const segId = row.dataset.segId;
+            const estado = row.querySelector('.eval-estado').value;
+            const notaVal = row.querySelector('.eval-nota').value;
+            const nota = notaVal !== '' ? parseFloat(notaVal) : null;
             const fecha_aprobacion = row.querySelector('.eval-fecha').value || null;
             const docente_evaluador = row.querySelector('.eval-docente').value.trim() || null;
-            
             const record = { estado, nota, fecha_aprobacion, docente_evaluador };
-
             if (segId) {
-              await update('seguimiento_modulos', segId, record);
-            } else if (estado !== 'Pendiente' || nota || fecha_aprobacion || docente_evaluador) {
-              await create('seguimiento_modulos', {
+              await update('seguimiento_unidades', segId, record);
+            } else if (estado !== 'Pendiente' || nota !== null || fecha_aprobacion || docente_evaluador) {
+              const newRec = await create('seguimiento_unidades', {
                 inscripcion_id: inscId,
-                submodulo_id: submoduloId,
+                unidad_id: unidadId,
                 ...record
               });
+              if (newRec && newRec.id) row.dataset.segId = newRec.id;
             }
           }
           showToast('Calificaciones guardadas exitosamente');
-          const btnSave = tabContent.querySelector('#btn-save-eval');
-          btnSave.innerHTML = '✔ Guardado';
-          btnSave.classList.replace('btn-primary', 'btn-secondary');
+          btn.innerHTML = '✔ Guardado';
+          btn.classList.replace('btn-primary', 'btn-secondary');
+          statusMsg.textContent = 'Guardado ' + new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
           setTimeout(() => {
-            btnSave.innerHTML = 'Guardar Calificaciones';
-            btnSave.classList.replace('btn-secondary', 'btn-primary');
+            btn.innerHTML = '💾 Guardar Calificaciones';
+            btn.classList.replace('btn-secondary', 'btn-primary');
+            btn.disabled = false;
           }, 2000);
-          
-          // Refrescar caché de seguimiento para próximos cambios en la misma ventana
-          seguimiento = await fetchAll('seguimiento_modulos');
-          
         } catch (err) {
           showToast('Error al guardar: ' + err.message, 'error');
+          btn.innerHTML = '💾 Guardar Calificaciones';
+          btn.disabled = false;
         }
       });
     };
@@ -726,8 +758,7 @@ async function openEvaluacionModuloModal(submoduloId, submoduloNombre) {
       btn.addEventListener('click', async () => {
         tabButtons.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        const trayectoId = btn.dataset.trayectoid;
-        await loadTab(trayectoId);
+        await loadTab(btn.dataset.trayectoid);
       });
     });
 
@@ -735,9 +766,8 @@ async function openEvaluacionModuloModal(submoduloId, submoduloNombre) {
 
   } catch (err) {
     const body = overlay.querySelector('#evaluacion-modal-body');
-    body.innerHTML = `<div style="padding:32px;text-align:center;color:var(--accent-red);">Error al cargar: ${err.message}</div>`;
+    body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--accent-red);">Error al cargar: ' + err.message + '</div>';
   }
 }
 
 export default { renderSubmodulos };
-
