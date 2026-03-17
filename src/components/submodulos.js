@@ -940,7 +940,7 @@ async function openCronogramaModuloModal(submoduloId, submoduloNombre) {
                     <td class="td-dia-label">${dias[diaId-1]}</td>
                     <td class="td-disp-val">${dispDia.map(d => d.hora_entrada.substring(0,5)).join('<br>') || '-'}</td>
                     <td class="td-disp-val">${dispDia.map(d => d.hora_salida.substring(0,5)).join('<br>') || '-'}</td>
-                    <td class="td-eventual-val"></td>
+                    <td class="td-eventual-val">${horariosDia.filter(h => h.horario_eventual).map(h => sanitize(h.horario_eventual)).join('<br>') || '-'}</td>
                     <td class="td-turno-val">${bloquesManana.map(renderBloque).join('')}</td>
                     <td class="td-turno-val">${bloquesTarde.map(renderBloque).join('')}</td>
                     <td class="td-turno-val">${bloquesVespertino.map(renderBloque).join('')}</td>
@@ -1038,6 +1038,10 @@ async function openCronogramaModuloModal(submoduloId, submoduloNombre) {
           <div class="form-group"><label class="form-label">Hasta</label><input type="time" class="form-input" id="new-slot-fin" value="12:00"></div>
         </div>
         <div class="form-group">
+          <label class="form-label">Horario Eventual / Excepcional</label>
+          <input type="text" class="form-input" id="new-slot-eventual" placeholder="Ej: Clases sábados cada 15 días, etc.">
+        </div>
+        <div class="form-group">
           <label class="form-label">Observaciones</label>
           <textarea class="form-input" id="new-slot-obs" style="min-height:60px;"></textarea>
         </div>
@@ -1054,6 +1058,7 @@ async function openCronogramaModuloModal(submoduloId, submoduloNombre) {
         const observaciones = document.getElementById('new-slot-obs').value.trim();
         const hora_inicio = document.getElementById('new-slot-inicio').value;
         const hora_fin = document.getElementById('new-slot-fin').value;
+        const horario_eventual = document.getElementById('new-slot-eventual').value.trim() || null;
 
         if (hora_inicio >= hora_fin) {
           showToast('La hora de inicio debe ser menor a la de fin', 'error');
@@ -1100,7 +1105,8 @@ async function openCronogramaModuloModal(submoduloId, submoduloNombre) {
           hora_fin,
           grupo_comision,
           aula,
-          observaciones
+          observaciones,
+          horario_eventual
         };
 
         const res = await create('horarios_submodulos', data);
