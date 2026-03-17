@@ -273,10 +273,8 @@ async function renderTrayectoDetail(trayectoId) {
       </div>
       <div class="section-actions">
         <button class="btn btn-secondary" id="btn-docs">${icons.document} Documentos</button>
-        <button class="btn btn-secondary" id="btn-informe-grupal">📊 Informe Grupal</button>
         ${isOwner ? `
         <button class="btn btn-secondary" id="btn-vincular-comun">${icons.plus} Vincular Mód. Común</button>
-        <button class="btn btn-secondary" id="btn-asignar-profesor">${icons.professors} Asignar Profesor</button>
         ` : ''}
         ${isMainOwner ? `
         <button class="btn btn-secondary" id="btn-importar-csv">📥 Importar CSV</button>
@@ -400,7 +398,7 @@ async function renderTrayectoDetail(trayectoId) {
     <div class="widget widget-gradient">
       <div class="widget-header"><span class="widget-title">💡 Tip</span></div>
       <p style="font-size:0.8125rem;color:var(--text-secondary);line-height:1.5;">
-        Asigná profesores para que puedan acceder a este trayecto y sus estudiantes desde su cuenta.
+        Los profesores de los módulos comunes se asignan automáticamente al trayecto al vincular el módulo.
       </p>
     </div>
   `;
@@ -456,16 +454,7 @@ async function renderTrayectoDetail(trayectoId) {
     openVincularComunModal(trayectoId, submodulos, comunLinks);
   });
 
-  // Asignar Profesor al trayecto
-  document.getElementById('btn-asignar-profesor')?.addEventListener('click', () => {
-    openAsignarProfesorModal(trayectoId, profesores, asignacionesTray);
-  });
 
-  // Informe Grupal
-  document.getElementById('btn-informe-grupal')?.addEventListener('click', async () => {
-    const { openInformeGrupalTrayecto } = await import('./informes_grupales.js');
-    await openInformeGrupalTrayecto(trayectoId);
-  });
 
   // Desvincular profesor (global)
   window.desvincularProfesor = async (asignacionId) => {
@@ -854,9 +843,27 @@ function openVincularComunModal(trayectoId, allSubmodulos, existingLinks) {
     if (!submodulo_id) { showToast('Seleccioná un módulo', 'error'); return; }
     try {
       await create('trayecto_modulo_comun', { trayecto_id: trayectoId, submodulo_id });
-      showToast('Módulo común vinculado');
+      
+      // Automatizar asignación de profesor si el módulo tiene uno
+      const sub = allSubmodulos.find(s => s.id === submodulo_id);
+      if (sub && sub.profesor_id) {
+        // Verificar si ya está asignado para evitar errores de duplicado
+        const asignacionesExistentes = await fetchAll('asignaciones_profesor');
+        const yaAsignado = asignacionesExistentes.some(a => a.trayecto_id === trayectoId && a.profesor_id === sub.profesor_id);
+        
+        if (!yaAsignado) {
+          try {
+            await create('asignaciones_profesor', { trayecto_id: trayectoId, profesor_id: sub.profesor_id });
+            console.log(`[Trayectos] Profesor ${sub.profesor_id} asignado automáticamente.`);
+          } catch (e) {
+            console.error('[Trayectos] Error en asignación automática:', e);
+          }
+        }
+      }
+
+      showToast('Módulo común vinculado y profesor asignado');
       overlay.remove();
-      renderTrayectos();
+      renderTrayectoDetail(trayectoId);
     } catch (err) { showToast(err.message || 'Error', 'error'); }
   });
 }
@@ -969,15 +976,15 @@ function openSeguimientoDetalleModal(inscripcionData, allModulosTray, unidades, 
                 <div style="margin-bottom:12px; padding-left:12px; border-left: 2px solid var(--accent-purple); background: rgba(0,0,0,0.15); padding-top:8px; padding-bottom:8px; padding-right:8px; border-radius:4px;">
                   <div style="font-size:0.8rem; margin-bottom:6px; color: var(--text-primary);"><strong>${u.orden ? u.orden + '. ' : ''}${sanitize(u.nombre)}</strong></div>
                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                    <select class="form-select status-select seg-uni-estado" data-uni-id="${u.id}" data-seg-id="${segU?.id || ''}" style="font-size:0.75rem; padding: 4px 6px;">
+                    <select class="form-select status-select seg-uni-estado" data-uni-id="${u.id}" data-seg-id="${segU?.id || ''}" style="font-size:0.75rem; padding: 4px 6px; ${uEstado === 'No aplica' ? 'background:rgba(255,255,255,0.05);color:var(--text-muted);border-color:var(--text-muted);' : ''}">
                       <option value="Pendiente" ${uEstado === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
                       <option value="En curso" ${uEstado === 'En curso' ? 'selected' : ''}>En curso</option>
                       <option value="Aprobado" ${uEstado === 'Aprobado' ? 'selected' : ''}>Aprobado</option>
                       <option value="Desaprobado" ${uEstado === 'Desaprobado' ? 'selected' : ''}>Desaprobado</option>
+                      <option value="No aplica" ${uEstado === 'No aplica' ? 'selected' : ''}>No aplica</option>
                     </select>
-                    <input type="number" class="form-input seg-uni-nota" data-uni-id="${u.id}" value="${uNota}" min="1" max="10" step="0.5" placeholder="Nota" style="font-size:0.75rem; padding: 4px 6px;" />
-                    <input type="date" class="form-input seg-uni-fecha" data-uni-id="${u.id}" value="${uFecha}" style="font-size:0.75rem; padding: 4px 6px;" />
-                    <input type="text" class="form-input seg-uni-docente" data-uni-id="${u.id}" value="${sanitize(uDocente)}" placeholder="Docente" style="font-size:0.75rem; padding: 4px 6px;" />
+                    <input type="number" class="form-input seg-uni-nota" data-uni-id="${u.id}" value="${uNota}" min="1" max="10" step="0.5" placeholder="Nota" style="font-size:0.75rem; padding: 4px 6px;" ${uEstado === 'No aplica' ? 'disabled' : ''} />
+                    <input type="date" class="form-input seg-uni-fecha" data-uni-id="${u.id}" value="${uFecha}" style="font-size:0.75rem; padding: 4px 6px; grid-column: span 2;" ${uEstado === 'No aplica' ? 'disabled' : ''} />
                   </div>
                 </div>
               `;
@@ -1031,8 +1038,8 @@ function openSeguimientoDetalleModal(inscripcionData, allModulosTray, unidades, 
               <option value="Aprobado" ${estado === 'Aprobado' ? 'selected' : ''}>Aprobado</option>
               <option value="Desaprobado" ${estado === 'Desaprobado' ? 'selected' : ''}>Desaprobado</option>
             </select>
-            <!-- Nota, fecha, docente -->
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;">
+            <!-- Nota, fecha -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">
               <div class="form-group" style="gap:4px;">
                 <label class="form-label" style="font-size:0.7rem;">Nota (1-10)</label>
                 <input type="number" class="form-input seg-nota" data-ref-id="${m.refId}" value="${nota}" min="1" max="10" step="0.5" placeholder="-" style="padding:6px 10px;font-size:0.8rem;" />
@@ -1040,10 +1047,6 @@ function openSeguimientoDetalleModal(inscripcionData, allModulosTray, unidades, 
               <div class="form-group" style="gap:4px;">
                 <label class="form-label" style="font-size:0.7rem;">Fecha aprobaci\u00f3n</label>
                 <input type="date" class="form-input seg-fecha" data-ref-id="${m.refId}" value="${fecha}" style="padding:6px 10px;font-size:0.8rem;" />
-              </div>
-              <div class="form-group" style="gap:4px;">
-                <label class="form-label" style="font-size:0.7rem;">Docente evaluador</label>
-                <input type="text" class="form-input seg-docente" data-ref-id="${m.refId}" value="${sanitize(docente)}" placeholder="Nombre" style="padding:6px 10px;font-size:0.8rem;" />
               </div>
             </div>`
       }
@@ -1095,6 +1098,30 @@ function openSeguimientoDetalleModal(inscripcionData, allModulosTray, unidades, 
     });
   });
 
+  // Manejar cambio en estado de unidades (No aplica)
+  overlay.querySelectorAll('.seg-uni-estado').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const val = sel.value;
+      const uniId = sel.dataset.uniId;
+      const nota = overlay.querySelector(`.seg-uni-nota[data-uni-id="${uniId}"]`);
+      const fecha = overlay.querySelector(`.seg-uni-fecha[data-uni-id="${uniId}"]`);
+      
+      if (val === 'No aplica') {
+        sel.style.background = 'rgba(255,255,255,0.05)';
+        sel.style.color = 'var(--text-muted)';
+        sel.style.borderColor = 'var(--text-muted)';
+        if (nota) { nota.value = ''; nota.disabled = true; }
+        if (fecha) { fecha.value = ''; fecha.disabled = true; }
+      } else {
+        sel.style.background = ''; // reset to default
+        sel.style.color = '';
+        sel.style.borderColor = '';
+        if (nota) nota.disabled = false;
+        if (fecha) fecha.disabled = false;
+      }
+    });
+  });
+
   overlay.querySelector('#modal-cancel').addEventListener('click', () => overlay.remove());
 
   overlay.querySelector('#modal-save').addEventListener('click', async () => {
@@ -1107,12 +1134,10 @@ function openSeguimientoDetalleModal(inscripcionData, allModulosTray, unidades, 
         const estado = sel.value;
         const notaInput = overlay.querySelector(`.seg-nota[data-ref-id="${refId}"]`);
         const fechaInput = overlay.querySelector(`.seg-fecha[data-ref-id="${refId}"]`);
-        const docenteInput = overlay.querySelector(`.seg-docente[data-ref-id="${refId}"]`);
         const nota = notaInput?.value ? parseFloat(notaInput.value) : null;
         const fecha_aprobacion = fechaInput?.value || null;
-        const docente_evaluador = docenteInput?.value?.trim() || null;
 
-        const record = { estado, nota, fecha_aprobacion, docente_evaluador };
+        const record = { estado, nota, fecha_aprobacion };
 
         if (segId) {
           // Actualizar existente
@@ -1137,17 +1162,15 @@ function openSeguimientoDetalleModal(inscripcionData, allModulosTray, unidades, 
         const estado = sel.value;
         const notaInput = overlay.querySelector(`.seg-uni-nota[data-uni-id="${uniId}"]`);
         const fechaInput = overlay.querySelector(`.seg-uni-fecha[data-uni-id="${uniId}"]`);
-        const docenteInput = overlay.querySelector(`.seg-uni-docente[data-uni-id="${uniId}"]`);
 
         const nota = notaInput?.value ? parseFloat(notaInput.value) : null;
         const fecha_aprobacion = fechaInput?.value || null;
-        const docente_evaluador = docenteInput?.value?.trim() || null;
 
-        const record = { estado, nota, fecha_aprobacion, docente_evaluador };
+        const record = { estado, nota, fecha_aprobacion };
 
         if (segId) {
           await update('seguimiento_unidades', segId, record);
-        } else {
+        } else if (estado !== 'Pendiente' || nota !== null || fecha_aprobacion || estado === 'No aplica') {
           await create('seguimiento_unidades', {
             inscripcion_id: inscripcionData.id,
             unidad_id: uniId,

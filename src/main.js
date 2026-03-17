@@ -13,6 +13,7 @@ import { renderSubmodulos } from './components/submodulos.js';
 import { renderAprobaciones } from './components/aprobaciones.js';
 import { renderReportes } from './components/reportes.js';
 import { renderUsuarios } from './components/usuarios.js';
+import { renderHorariosDocentes } from './components/horarios_docentes.js';
 import { renderResetPassword } from './components/reset-password.js';
 import { registerRoute, initRouter, setOnRouteChange } from './router.js';
 import { isSupabaseConfigured } from './supabaseClient.js';
@@ -62,6 +63,7 @@ function init() {
     registerRoute('aprobaciones', renderAprobaciones);
     registerRoute('reportes', renderReportes);
     registerRoute('usuarios', renderUsuarios);
+    registerRoute('horarios_docentes', renderHorariosDocentes);
 
     // Utilidad global
     window.limpiarTodo = () => {

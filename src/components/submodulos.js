@@ -5,6 +5,7 @@ import { getContentArea, getPanelRight } from './layout.js';
 import { icons, showToast, createModal, confirmDialog, sanitize } from '../utils/helpers.js';
 import { fetchAll, create, update, remove } from '../utils/data.js';
 import { getCurrentUser } from './auth.js';
+import { getCurrentYear } from '../utils/state.js';
 
 let expandedCard = null; // ID del módulo común expandido para ver unidades
 
@@ -84,14 +85,15 @@ export async function renderSubmodulos() {
                     <button class="btn btn-secondary evaluar-submodulo-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
                       📝 Evaluar
                     </button>
-                    ${sub.nombre && sub.nombre.toLowerCase().includes('higiene y seguridad') ? `
+                    <button class="btn btn-secondary cronograma-submodulo-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
+                      🗓️ Cronograma
+                    </button>
                     <button class="btn btn-secondary acta-submodulo-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
                       📄 Acta
                     </button>
                     <button class="btn btn-secondary informe-grupal-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
                       📊 Informe
                     </button>
-                    ` : ''}
                     ` : ''}
                     ${(isAdmin || sub.profesor_id === myProfesor?.id) ? `
                     <button class="btn btn-secondary add-unidad-btn" data-subid="${sub.id}" style="padding: 4px 10px; font-size: 0.75rem; border-radius: 6px;">
@@ -277,6 +279,15 @@ export async function renderSubmodulos() {
       const subNombre = btn.dataset.subnombre;
       const { openGenerarActaModal } = await import('./actas.js');
       await openGenerarActaModal(subId, subNombre);
+    });
+  });
+
+  content.querySelectorAll('.cronograma-submodulo-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const subId = btn.dataset.subid;
+      const subNombre = btn.dataset.subnombre;
+      await openCronogramaModuloModal(subId, subNombre);
     });
   });
 
@@ -645,10 +656,13 @@ async function openEvaluacionModuloModal(submoduloId, submoduloNombre) {
           const docente = (seg && seg.docente_evaluador) ? seg.docente_evaluador : nombreResponsable;
           const bgColor = estado === 'Aprobado' ? 'rgba(34,197,94,0.15)' :
                           estado === 'Desaprobado' ? 'rgba(239,68,68,0.13)' :
-                          estado === 'En curso' ? 'rgba(251,191,36,0.13)' : 'rgba(139,92,246,0.09)';
+                          estado === 'En curso' ? 'rgba(251,191,36,0.13)' :
+                          estado === 'No aplica' ? 'rgba(255,255,255,0.05)' : 'rgba(139,92,246,0.09)';
           const txtColor = estado === 'Aprobado' ? '#22c55e' :
                            estado === 'Desaprobado' ? '#ef4444' :
-                           estado === 'En curso' ? '#fbbf24' : 'var(--text-muted)';
+                           estado === 'En curso' ? '#fbbf24' :
+                           estado === 'No aplica' ? 'var(--text-muted)' : 'var(--text-muted)';
+          const isDisabled = estado === 'No aplica' ? 'disabled' : '';
 
           rowsHTML +=
             '<div class="eval-row" data-insc-id="' + insc.id + '" data-unidad-id="' + unidad.id + '" data-seg-id="' + ((seg && seg.id) ? seg.id : '') + '"' +
@@ -663,16 +677,14 @@ async function openEvaluacionModuloModal(submoduloId, submoduloNombre) {
                   '<option value="En curso"' + (estado === 'En curso' ? ' selected' : '') + '>En curso</option>' +
                   '<option value="Aprobado"' + (estado === 'Aprobado' ? ' selected' : '') + '>Aprobado</option>' +
                   '<option value="Desaprobado"' + (estado === 'Desaprobado' ? ' selected' : '') + '>Desaprobado</option>' +
+                  '<option value="No aplica"' + (estado === 'No aplica' ? ' selected' : '') + '>No aplica</option>' +
                 '</select>' +
               '</div>' +
               '<div style="flex:0.75;">' +
-                '<input type="number" class="form-input eval-nota" value="' + nota + '" min="1" max="10" step="0.5" placeholder="Nota" style="width:100%;font-size:0.8rem;" />' +
+                '<input type="number" class="form-input eval-nota" value="' + nota + '" min="1" max="10" step="0.5" placeholder="Nota" style="width:100%;font-size:0.8rem;" ' + isDisabled + ' />' +
               '</div>' +
               '<div style="flex:1.1;">' +
-                '<input type="date" class="form-input eval-fecha" value="' + fecha + '" style="width:100%;font-size:0.8rem;" />' +
-              '</div>' +
-              '<div style="flex:1.5;">' +
-                '<input type="text" class="form-input eval-docente" value="' + sanitize(docente) + '" placeholder="Docente evaluador" style="width:100%;font-size:0.8rem;" />' +
+                '<input type="date" class="form-input eval-fecha" value="' + fecha + '" style="width:100%;font-size:0.8rem;" ' + isDisabled + ' />' +
               '</div>' +
             '</div>';
         });
@@ -693,7 +705,6 @@ async function openEvaluacionModuloModal(submoduloId, submoduloNombre) {
                 '<div style="flex:1;">Estado</div>' +
                 '<div style="flex:0.75;">Nota</div>' +
                 '<div style="flex:1.1;">Fecha Aprob.</div>' +
-                '<div style="flex:1.5;">Docente Evaluador</div>' +
               '</div>' +
               rowsHTML +
             '</div>' +
@@ -707,6 +718,36 @@ async function openEvaluacionModuloModal(submoduloId, submoduloNombre) {
           '<span id="eval-status-msg" style="font-size:0.8rem;color:var(--text-muted);"></span>' +
           '<button class="btn btn-primary" id="btn-save-eval">💾 Guardar Calificaciones</button>' +
         '</div>';
+
+      // Evento para cambiar colores y deshabilitar inputs
+      tabContent.querySelectorAll('.eval-estado').forEach(sel => {
+        sel.addEventListener('change', () => {
+          const val = sel.value;
+          const row = sel.closest('.eval-row');
+          const nota = row.querySelector('.eval-nota');
+          const fecha = row.querySelector('.eval-fecha');
+          
+          let bg = 'rgba(139,92,246,0.09)', txt = 'var(--text-muted)';
+          if (val === 'Aprobado') { bg = 'rgba(34,197,94,0.15)'; txt = '#22c55e'; }
+          else if (val === 'Desaprobado') { bg = 'rgba(239,68,68,0.13)'; txt = '#ef4444'; }
+          else if (val === 'En curso') { bg = 'rgba(251,191,36,0.13)'; txt = '#fbbf24'; }
+          else if (val === 'No aplica') { bg = 'rgba(255,255,255,0.05)'; txt = 'var(--text-muted)'; }
+          
+          sel.style.background = bg;
+          sel.style.color = txt;
+          sel.style.borderColor = txt;
+          
+          if (val === 'No aplica') {
+            nota.value = '';
+            nota.disabled = true;
+            fecha.value = '';
+            fecha.disabled = true;
+          } else {
+            nota.disabled = false;
+            fecha.disabled = false;
+          }
+        });
+      });
 
       tabContent.querySelector('#btn-save-eval').addEventListener('click', async () => {
         const btn = tabContent.querySelector('#btn-save-eval');
@@ -723,11 +764,10 @@ async function openEvaluacionModuloModal(submoduloId, submoduloNombre) {
             const notaVal = row.querySelector('.eval-nota').value;
             const nota = notaVal !== '' ? parseFloat(notaVal) : null;
             const fecha_aprobacion = row.querySelector('.eval-fecha').value || null;
-            const docente_evaluador = row.querySelector('.eval-docente').value.trim() || null;
-            const record = { estado, nota, fecha_aprobacion, docente_evaluador };
+            const record = { estado, nota, fecha_aprobacion };
             if (segId) {
               await update('seguimiento_unidades', segId, record);
-            } else if (estado !== 'Pendiente' || nota !== null || fecha_aprobacion || docente_evaluador) {
+            } else if (estado !== 'Pendiente' || nota !== null || fecha_aprobacion || estado === 'No aplica') {
               const newRec = await create('seguimiento_unidades', {
                 inscripcion_id: inscId,
                 unidad_id: unidadId,
@@ -767,6 +807,450 @@ async function openEvaluacionModuloModal(submoduloId, submoduloNombre) {
   } catch (err) {
     const body = overlay.querySelector('#evaluacion-modal-body');
     body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--accent-red);">Error al cargar: ' + err.message + '</div>';
+  }
+}
+
+// ============================================
+// MODAL: CRONOGRAMA POR CUATRIMESTRE
+// ============================================
+async function openCronogramaModuloModal(submoduloId, submoduloNombre) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:1150px;width:98vw;">
+      <div class="modal-header">
+        <h3 class="modal-title">🗓️ Organización Diaria y Horaria — ${submoduloNombre}</h3>
+        <button class="modal-close" id="modal-close-btn">${icons.close}</button>
+      </div>
+      <div class="modal-body" id="cronograma-modal-body">
+        <div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando cronograma...</div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#modal-close-btn').addEventListener('click', () => overlay.remove());
+
+  try {
+    const body = overlay.querySelector('#cronograma-modal-body');
+    let currentCuatrimestre = 1;
+    const anio = getCurrentYear();
+    let allHorarios = [];
+    let misDisponibilidades = [];
+    let selectedTrayectoId = null;
+
+    const renderTable = async (cuatrimestre, trayectoId = null) => {
+      body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando datos...</div>`;
+      
+      const [submodulos, allTrayectos, mappings] = await Promise.all([
+        fetchAll('submodulos'),
+        fetchAll('trayectos_formativos'),
+        fetchAll('trayecto_modulo_comun', { eq: { submodulo_id: submoduloId } })
+      ]);
+      
+      const currentSub = submodulos.find(s => s.id === submoduloId);
+      const profId = currentSub?.profesor_id;
+      const linkedTrayectos = allTrayectos.filter(t => mappings.some(m => m.trayecto_id === t.id));
+      
+      // Si no hay trayecto seleccionado, tomamos el primero
+      if (!selectedTrayectoId && linkedTrayectos.length > 0) {
+        selectedTrayectoId = linkedTrayectos[0].id;
+      }
+      
+      let dispResults;
+      try {
+        dispResults = profId ? await fetchAll('disponibilidad_docentes', { 
+          eq: { profesor_id: profId, submodulo_id: submoduloId } 
+        }) : [];
+      } catch (err) {
+        console.warn('[Cronograma] Error fetching module-specific availability. Falling back to shared.', err);
+        dispResults = profId ? await fetchAll('disponibilidad_docentes', { 
+          eq: { profesor_id: profId } 
+        }) : [];
+      }
+      
+      const [horarios] = await Promise.all([
+        fetchAll('horarios_submodulos', { 
+          eq: { submodulo_id: submoduloId, trayecto_id: selectedTrayectoId }, 
+          orderBy: 'hora_inicio', 
+          ascending: true 
+        })
+      ]);
+      allHorarios = horarios;
+      misDisponibilidades = dispResults;
+
+      const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+      const misHorarios = allHorarios.filter(h => h.cuatrimestre === cuatrimestre && h.anio === anio);
+      const currentTrayecto = linkedTrayectos.find(t => t.id === selectedTrayectoId);
+
+      body.innerHTML = `
+        <div class="tabs" style="margin-bottom: 20px;">
+          <button class="tab-btn ${cuatrimestre === 1 ? 'active' : ''}" id="tab-c1">1° Cuatrimestre</button>
+          <button class="tab-btn ${cuatrimestre === 2 ? 'active' : ''}" id="tab-c2">2° Cuatrimestre</button>
+          <div style="border-left: 1px solid var(--border-color); margin: 0 10px;"></div>
+          ${linkedTrayectos.map(t => `
+            <button class="tab-btn trayecto-tab ${selectedTrayectoId === t.id ? 'active' : ''}" data-id="${t.id}">${t.nombre}</button>
+          `).join('')}
+          <div style="flex:1"></div>
+          <button class="btn btn-secondary" id="btn-config-disponibilidad-modal" style="margin-right:8px;">${icons.calendar} Mi Disponibilidad</button>
+          <button class="btn btn-add" id="btn-add-slot-modal">${icons.plus} Agregar Bloque</button>
+          <button class="btn btn-secondary" onclick="window.print()">${icons.document} Imprimir</button>
+        </div>
+
+        <div class="tabla-cronograma-container">
+          <table class="cronograma-table">
+            <thead>
+              <tr>
+                <th class="th-dia">Día</th>
+                <th class="th-disp">Entrada</th>
+                <th class="th-disp">Salida</th>
+                <th class="th-eventual">Horario Eventual</th>
+                <th class="th-turno">Mañana</th>
+                <th class="th-turno">Tarde</th>
+                <th class="th-turno">Vespertino</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${[1, 2, 3, 4, 5].map(diaId => {
+                const horariosDia = misHorarios.filter(h => h.dia_semana === diaId).sort((a,b) => a.hora_inicio.localeCompare(b.hora_inicio));
+                const dispDia = misDisponibilidades
+                  .filter(d => d.dia_semana === diaId && d.cuatrimestre === cuatrimestre)
+                  .sort((a,b) => a.hora_entrada.localeCompare(b.hora_entrada));
+                
+                // Clasificar bloques por turno
+                const bloquesManana = horariosDia.filter(h => h.hora_inicio < '13:00');
+                const bloquesTarde = horariosDia.filter(h => h.hora_inicio >= '13:00' && h.hora_inicio < '18:30');
+                const bloquesVespertino = horariosDia.filter(h => h.hora_inicio >= '18:30');
+
+                const renderBloque = (h) => {
+                  if (!h) return '';
+                  return `
+                    <div class="bloque-celda-card" data-id="${h.id}">
+                      <div class="bloque-celda-time">${h.hora_inicio.substring(0,5)} - ${h.hora_fin?.substring(0,5) || '--:--'}</div>
+                      <div class="bloque-celda-trayecto">${sanitize(currentTrayecto?.nombre || 'Trayecto')}</div>
+                      <div class="bloque-celda-grupo">${sanitize(h.grupo_comision || '-')}</div>
+                      <div class="bloque-celda-actions">
+                        <button class="btn-icon btn-del-slot" data-id="${h.id}" title="Eliminar">${icons.trash}</button>
+                      </div>
+                    </div>
+                  `;
+                };
+
+                return `
+                  <tr>
+                    <td class="td-dia-label">${dias[diaId-1]}</td>
+                    <td class="td-disp-val">${dispDia.map(d => d.hora_entrada.substring(0,5)).join('<br>') || '-'}</td>
+                    <td class="td-disp-val">${dispDia.map(d => d.hora_salida.substring(0,5)).join('<br>') || '-'}</td>
+                    <td class="td-eventual-val"></td>
+                    <td class="td-turno-val">${bloquesManana.map(renderBloque).join('')}</td>
+                    <td class="td-turno-val">${bloquesTarde.map(renderBloque).join('')}</td>
+                    <td class="td-turno-val">${bloquesVespertino.map(renderBloque).join('')}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+
+        <style>
+          .tabla-cronograma-container { margin-top: 10px; background: var(--bg-card); border-radius: 12px; border: 1px solid var(--border-color); overflow-x: auto; }
+          .cronograma-table { width: 100%; border-collapse: collapse; min-width: 900px; }
+          .cronograma-table th, .cronograma-table td { border: 1px solid var(--border-color); padding: 8px; vertical-align: top; }
+          
+          .th-dia { width: 90px; background: var(--bg-secondary); }
+          .th-disp { width: 70px; background: var(--bg-secondary); font-size: 0.7rem; color: var(--accent-green); }
+          .th-eventual { width: 90px; background: var(--bg-secondary); font-size: 0.7rem; }
+          .th-turno { width: 25%; background: var(--bg-secondary); font-weight: 700; color: var(--text-primary); text-transform: uppercase; font-size: 0.75rem; }
+          
+          .td-dia-label { background: var(--bg-secondary); font-weight: 800; text-align: center; color: var(--text-primary); font-size: 0.85rem; }
+          .td-disp-val { text-align: center; font-weight: 700; color: var(--accent-green); font-size: 0.8rem; }
+          .td-turno-val { height: 80px; padding: 4px !important; background: rgba(255,255,255,0.01); }
+          
+          .bloque-celda-card {
+            background: var(--bg-card); border: 1px solid var(--border-color); border-left: 3px solid var(--accent-green);
+            border-radius: 6px; padding: 6px; margin-bottom: 4px; position: relative;
+          }
+          .bloque-celda-card:hover { border-color: var(--accent-green); }
+          .bloque-celda-time { font-size: 0.6rem; font-weight: 800; color: var(--accent-purple-light); }
+          .bloque-celda-trayecto { font-size: 0.7rem; font-weight: 700; color: var(--text-primary); margin: 2px 0; line-height: 1.1; }
+          .bloque-celda-grupo { font-size: 0.65rem; color: var(--text-secondary); }
+          
+          .bloque-celda-actions { 
+            position: absolute; top: 2px; right: 2px; display: none; gap: 2px; background: var(--bg-card); border-radius: 4px; padding: 2px;
+          }
+          .bloque-celda-card:hover .bloque-celda-actions { display: flex; }
+
+          @media print {
+            .tabs, .btn-icon, .slot-actions, .bloque-celda-actions { display: none !important; }
+            .tabla-cronograma-container { border: none; }
+            .cronograma-table { border: 2px solid #000; width: 100% !important; }
+            .cronograma-table th, .cronograma-table td { border: 1px solid #000 !important; color: #000 !important; }
+          }
+        </style>
+      `;
+
+      // Eventos
+      body.querySelector('#tab-c1').onclick = () => { currentCuatrimestre = 1; renderTable(1); };
+      body.querySelector('#tab-c2').onclick = () => { currentCuatrimestre = 2; renderTable(2); };
+      body.querySelectorAll('.trayecto-tab').forEach(btn => {
+        btn.onclick = () => { selectedTrayectoId = btn.dataset.id; renderTable(currentCuatrimestre); };
+      });
+      body.querySelector('#btn-config-disponibilidad-modal').onclick = () => openDisponibilidadModal(profId, cuatrimestre);
+      const btnAdd = body.querySelector('#btn-add-slot-modal');
+      if (btnAdd) btnAdd.onclick = () => openAddSlotModal(cuatrimestre, linkedTrayectos);
+      body.querySelectorAll('.btn-del-slot').forEach(btn => {
+        btn.onclick = async () => {
+          if (confirm('¿Eliminar este bloque horario?')) {
+            await remove('horarios_submodulos', btn.dataset.id);
+            showToast('Horario eliminado');
+            renderTable(cuatrimestre);
+          }
+        };
+      });
+    };
+
+    const openAddSlotModal = (cuatrimestre, linkedTrayectos) => {
+      const formHTML = `
+        <div class="form-group">
+          <label class="form-label">Trayecto Formativo</label>
+          <select class="form-select" id="new-slot-trayecto">
+            ${linkedTrayectos.map(t => `<option value="${t.id}" ${selectedTrayectoId === t.id ? 'selected' : ''}>${t.nombre}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Día de la Semana</label>
+          <select class="form-select" id="new-slot-dia">
+            <option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option>
+            <option value="4">Jueves</option><option value="5">Viernes</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Grupo / Comisión</label>
+            <input type="text" class="form-input" id="new-slot-comision" placeholder="Ej: Grupo 1">
+          </div>
+          <div class="form-group">
+            <label class="form-label">📍 Aula</label>
+            <input type="text" class="form-input" id="new-slot-aula" placeholder="Ej: Aula 3">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Desde</label><input type="time" class="form-input" id="new-slot-inicio" value="08:00"></div>
+          <div class="form-group"><label class="form-label">Hasta</label><input type="time" class="form-input" id="new-slot-fin" value="12:00"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Observaciones</label>
+          <textarea class="form-input" id="new-slot-obs" style="min-height:60px;"></textarea>
+        </div>
+      `;
+      const footerHTML = `<button class="btn btn-secondary" id="slot-cancel">Cancelar</button><button class="btn btn-primary" id="slot-save">Guardar Bloque</button>`;
+      const slotOverlay = createModal('Nuevo Bloque Horario', formHTML, footerHTML);
+      
+      slotOverlay.querySelector('#slot-cancel').addEventListener('click', () => slotOverlay.remove());
+      slotOverlay.querySelector('#slot-save').addEventListener('click', async () => {
+        const trayecto_id = document.getElementById('new-slot-trayecto').value;
+        const dia_semana = parseInt(document.getElementById('new-slot-dia').value);
+        const grupo_comision = document.getElementById('new-slot-comision').value.trim();
+        const aula = document.getElementById('new-slot-aula').value.trim();
+        const observaciones = document.getElementById('new-slot-obs').value.trim();
+        const hora_inicio = document.getElementById('new-slot-inicio').value;
+        const hora_fin = document.getElementById('new-slot-fin').value;
+
+        if (hora_inicio >= hora_fin) {
+          showToast('La hora de inicio debe ser menor a la de fin', 'error');
+          return;
+        }
+
+        // Validaciones
+        const misDisp = misDisponibilidades.filter(d => d.dia_semana === dia_semana && d.cuatrimestre === cuatrimestre);
+        if (misDisp.length > 0) {
+          const within = misDisp.some(d => {
+            const ent = d.hora_entrada.substring(0,5);
+            const sal = d.hora_salida.substring(0,5);
+            return hora_inicio >= ent && hora_fin <= sal;
+          });
+          if (!within) {
+            showToast('El bloque está fuera de los turnos de entrada/salida configurados para este día.', 'warning');
+            return;
+          }
+        }
+
+        const otros = allHorarios.filter(h => h.dia_semana === dia_semana && h.cuatrimestre === cuatrimestre);
+        const conflict = otros.some(o => {
+          const startO = o.hora_inicio.substring(0,5);
+          const endO = o.hora_fin.substring(0,5);
+          return (hora_inicio < endO) && (hora_fin > startO);
+        });
+        if (conflict) {
+          showToast('Existe una superposición con otro bloque existente.', 'error');
+          return;
+        }
+
+        const btn = slotOverlay.querySelector('#slot-save');
+        btn.disabled = true;
+        btn.textContent = 'Guardando...';
+
+        try {
+          const data = {
+            submodulo_id: submoduloId,
+          trayecto_id,
+          cuatrimestre,
+          anio,
+          dia_semana,
+          hora_inicio,
+          hora_fin,
+          grupo_comision,
+          aula,
+          observaciones
+        };
+
+        const res = await create('horarios_submodulos', data);
+          showToast('Bloque agregado');
+          slotOverlay.remove();
+          renderTable(cuatrimestre);
+        } catch (err) {
+          showToast('Error al guardar: ' + err.message, 'error');
+          btn.disabled = false;
+          btn.textContent = 'Guardar Bloque';
+        }
+      });
+    };
+
+    const openDisponibilidadModal = async (profesor_id, cuatrimestre) => {
+      if (!profesor_id) {
+        showToast('Este submódulo no tiene un profesor asignado.', 'error');
+        return;
+      }
+
+      const renderDispContent = () => {
+        const diasNm = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+        return `
+          <div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border-color); border-radius:8px;">
+            <table class="cronograma-table">
+              <thead>
+                <tr>
+                  <th>Día</th>
+                  <th>Entrada / Salida</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${[1, 2, 3, 4, 5].map(diaId => {
+                  const slots = misDisponibilidades.filter(d => d.dia_semana === diaId && d.cuatrimestre === cuatrimestre);
+                  return `
+                    <tr>
+                      <td style="font-weight:bold; background:var(--bg-secondary);">${diasNm[diaId]}</td>
+                      <td style="padding:0;">
+                        <table style="width:100%; border-collapse:collapse;">
+                          ${slots.length === 0 ? `
+                            <tr><td style="padding:10px; color:var(--text-muted); text-align:center;">Sin turnos</td></tr>
+                          ` : slots.map(s => `
+                            <tr style="border-bottom: 1px solid var(--border-color);">
+                              <td style="padding:10px; text-align:center;">${s.hora_entrada.substring(0,5)} - ${s.hora_salida.substring(0,5)}</td>
+                              <td style="padding:10px; width:40px;">
+                                <button class="btn-icon btn-del-disp-row" data-id="${s.id}">${icons.trash}</button>
+                              </td>
+                            </tr>
+                          `).join('')}
+                        </table>
+                      </td>
+                      <td style="text-align:center;">
+                        <button class="btn btn-secondary btn-sm btn-add-disp-row" data-dia="${diaId}">${icons.plus} Agregar</button>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      };
+
+      const dispOverlay = createModal('Mi Disponibilidad (Entrada/Salida)', `<div id="disp-modal-body-sub">${renderDispContent()}</div>`, `<button class="btn btn-secondary" id="disp-close-sub">Cerrar</button>`);
+      
+      const updateDispView = () => {
+        dispOverlay.querySelector('#disp-modal-body-sub').innerHTML = renderDispContent();
+        attachDispEvents();
+      };
+
+      const attachDispEvents = () => {
+        dispOverlay.querySelectorAll('.btn-del-disp-row').forEach(btn => {
+          btn.onclick = async () => {
+            if (confirm('¿Eliminar este turno de entrada/salida?')) {
+              await remove('disponibilidad_docentes', btn.dataset.id);
+              misDisponibilidades = misDisponibilidades.filter(d => d.id !== btn.dataset.id);
+              updateDispView();
+            }
+          };
+        });
+
+        dispOverlay.querySelectorAll('.btn-add-disp-row').forEach(btn => {
+          btn.onclick = () => {
+            const diaId = parseInt(btn.dataset.dia);
+            const addForm = `
+              <div class="form-row">
+                <div class="form-group"><label>Entrada</label><input type="time" id="add-disp-in" class="form-input" value="08:00"></div>
+                <div class="form-group"><label>Salida</label><input type="time" id="add-disp-out" class="form-input" value="12:00"></div>
+              </div>
+            `;
+            const addModal = createModal('Agregar Turno', addForm, `<button class="btn btn-secondary" id="add-disp-cancel">Cancelar</button><button class="btn btn-primary" id="add-disp-save">Guardar</button>`);
+            
+            addModal.querySelector('#add-disp-cancel').onclick = () => addModal.remove();
+            addModal.querySelector('#add-disp-save').onclick = async () => {
+              const btn = addModal.querySelector('#add-disp-save');
+              const entrada = document.getElementById('add-disp-in').value;
+              const salida = document.getElementById('add-disp-out').value;
+              if (entrada >= salida) { showToast('Entrada debe ser antes que salida', 'error'); return; }
+              
+              btn.disabled = true;
+              btn.textContent = 'Guardando...';
+              
+              try {
+                let record = {
+                  profesor_id,
+                  submodulo_id: submoduloId, // Intento de independencia
+                  dia_semana: diaId,
+                  hora_entrada: entrada,
+                  hora_salida: salida,
+                  cuatrimestre,
+                  anio
+                };
+
+                let res;
+                try {
+                  res = await create('disponibilidad_docentes', record);
+                } catch (err) {
+                  console.warn('[Cronograma] Failed to save with submodulo_id. Falling back to shared.', err);
+                  delete record.submodulo_id; // Quitar para compatibilidad
+                  res = await create('disponibilidad_docentes', record);
+                  showToast('Guardado en modo compartido (Ejecutá el SQL para independencia)');
+                }
+
+                misDisponibilidades.push(res);
+                showToast('Turno guardado');
+                addModal.remove();
+                updateDispView();
+              } catch (err) {
+                console.error('[Cronograma] Error al guardar disponibilidad:', err);
+                showToast('Error al guardar. Es posible que falte la columna técnica en la base de datos.', 'error');
+                btn.disabled = false;
+                btn.textContent = 'Guardar';
+              }
+            };
+          };
+        });
+      };
+
+      attachDispEvents();
+      dispOverlay.querySelector('#disp-close-sub').onclick = () => {
+        dispOverlay.remove();
+        renderTable(cuatrimestre);
+      };
+    };
+
+    await renderTable(currentCuatrimestre);
+
+  } catch (err) {
+    overlay.querySelector('#cronograma-modal-body').innerHTML = `<div class="error-state">${err.message}</div>`;
   }
 }
 

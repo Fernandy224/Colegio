@@ -10,8 +10,19 @@ import { getSupabase } from '../supabaseClient.js';
 export async function fetchAll(table, options = {}) {
     console.log(`[Data] Fetching all from ${table}...`);
     let query = getSupabase().from(table).select(options.select || '*');
+    
+    // Aplicar filtros eq si existen
+    if (options.eq) {
+        Object.entries(options.eq).forEach(([field, value]) => {
+            if (value !== undefined && value !== null) {
+                query = query.eq(field, value);
+            }
+        });
+    }
+
     if (options.orderBy) query = query.order(options.orderBy, { ascending: options.ascending ?? false });
     else query = query.order('created_at', { ascending: false });
+    
     const { data, error } = await query;
     if (error) {
         console.error(`[Data] Error fetching ${table}:`, error);
