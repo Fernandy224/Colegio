@@ -851,9 +851,9 @@ async function openCronogramaModuloModal(submoduloId, submoduloNombre) {
       const profId = currentSub?.profesor_id;
       const linkedTrayectos = allTrayectos.filter(t => mappings.some(m => m.trayecto_id === t.id));
       
-      // Si no hay trayecto seleccionado, tomamos el primero
-      if (!selectedTrayectoId && linkedTrayectos.length > 0) {
-        selectedTrayectoId = linkedTrayectos[0].id;
+      // Si no hay trayecto seleccionado, mostramos "todos" por defecto
+      if (!selectedTrayectoId) {
+        selectedTrayectoId = 'all';
       }
       
       let dispResults;
@@ -870,7 +870,7 @@ async function openCronogramaModuloModal(submoduloId, submoduloNombre) {
       
       const [horarios] = await Promise.all([
         fetchAll('horarios_submodulos', { 
-          eq: { submodulo_id: submoduloId, trayecto_id: selectedTrayectoId }, 
+          eq: { submodulo_id: submoduloId }, 
           orderBy: 'hora_inicio', 
           ascending: true 
         })
@@ -879,14 +879,19 @@ async function openCronogramaModuloModal(submoduloId, submoduloNombre) {
       misDisponibilidades = dispResults;
 
       const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
-      const misHorarios = allHorarios.filter(h => h.cuatrimestre === cuatrimestre && h.anio === anio);
-      const currentTrayecto = linkedTrayectos.find(t => t.id === selectedTrayectoId);
+      let misHorarios = allHorarios.filter(h => h.cuatrimestre === cuatrimestre && h.anio === anio);
+      
+      // Filtrar por trayecto si no estamos en modo "Ver Todos"
+      if (selectedTrayectoId !== 'all') {
+        misHorarios = misHorarios.filter(h => h.trayecto_id === selectedTrayectoId);
+      }
 
       body.innerHTML = `
         <div class="tabs" style="margin-bottom: 20px;">
           <button class="tab-btn ${cuatrimestre === 1 ? 'active' : ''}" id="tab-c1">1° Cuatrimestre</button>
           <button class="tab-btn ${cuatrimestre === 2 ? 'active' : ''}" id="tab-c2">2° Cuatrimestre</button>
           <div style="border-left: 1px solid var(--border-color); margin: 0 10px;"></div>
+          <button class="tab-btn trayecto-tab ${selectedTrayectoId === 'all' ? 'active' : ''}" data-id="all">Ver Todos</button>
           ${linkedTrayectos.map(t => `
             <button class="tab-btn trayecto-tab ${selectedTrayectoId === t.id ? 'active' : ''}" data-id="${t.id}">${t.nombre}</button>
           `).join('')}
@@ -923,10 +928,12 @@ async function openCronogramaModuloModal(submoduloId, submoduloNombre) {
 
                 const renderBloque = (h) => {
                   if (!h) return '';
+                  const t = linkedTrayectos.find(tr => tr.id === h.trayecto_id);
+                  const tNombre = t ? t.nombre : 'Sin trayecto';
                   return `
                     <div class="bloque-celda-card" data-id="${h.id}">
                       <div class="bloque-celda-time">${h.hora_inicio.substring(0,5)} - ${h.hora_fin?.substring(0,5) || '--:--'}</div>
-                      <div class="bloque-celda-trayecto">${sanitize(currentTrayecto?.nombre || 'Trayecto')}</div>
+                      <div class="bloque-celda-trayecto">${sanitize(tNombre)}</div>
                       <div class="bloque-celda-grupo">${sanitize(h.grupo_comision || '-')}</div>
                       <div class="bloque-celda-actions">
                         <button class="btn-icon btn-del-slot" data-id="${h.id}" title="Eliminar">${icons.trash}</button>
