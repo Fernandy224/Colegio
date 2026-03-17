@@ -851,10 +851,8 @@ async function openCronogramaModuloModal(submoduloId, submoduloNombre) {
       const profId = currentSub?.profesor_id;
       const linkedTrayectos = allTrayectos.filter(t => mappings.some(m => m.trayecto_id === t.id));
       
-      // Si no hay trayecto seleccionado, mostramos "todos" por defecto
-      if (!selectedTrayectoId) {
-        selectedTrayectoId = 'all';
-      }
+      // Siempre mostramos todos por defecto
+      selectedTrayectoId = 'all';
       
       let dispResults;
       try {
@@ -879,22 +877,14 @@ async function openCronogramaModuloModal(submoduloId, submoduloNombre) {
       misDisponibilidades = dispResults;
 
       const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
-      let misHorarios = allHorarios.filter(h => h.cuatrimestre === cuatrimestre && h.anio === anio);
-      
-      // Filtrar por trayecto si no estamos en modo "Ver Todos"
-      if (selectedTrayectoId !== 'all') {
-        misHorarios = misHorarios.filter(h => h.trayecto_id === selectedTrayectoId);
-      }
+      // Ya no filtramos por trayecto individual en las pestañas
+      misHorarios = allHorarios.filter(h => h.cuatrimestre === cuatrimestre && h.anio === anio);
 
       body.innerHTML = `
         <div class="tabs" style="margin-bottom: 20px;">
           <button class="tab-btn ${cuatrimestre === 1 ? 'active' : ''}" id="tab-c1">1° Cuatrimestre</button>
           <button class="tab-btn ${cuatrimestre === 2 ? 'active' : ''}" id="tab-c2">2° Cuatrimestre</button>
-          <div style="border-left: 1px solid var(--border-color); margin: 0 10px;"></div>
-          <button class="tab-btn trayecto-tab ${selectedTrayectoId === 'all' ? 'active' : ''}" data-id="all">Ver Todos</button>
-          ${linkedTrayectos.map(t => `
-            <button class="tab-btn trayecto-tab ${selectedTrayectoId === t.id ? 'active' : ''}" data-id="${t.id}">${t.nombre}</button>
-          `).join('')}
+          <div style="flex:1"></div>
           <div style="flex:1"></div>
           <button class="btn btn-secondary" id="btn-config-disponibilidad-modal" style="margin-right:8px;">${icons.calendar} Mi Disponibilidad</button>
           <button class="btn btn-add" id="btn-add-slot-modal">${icons.plus} Agregar Bloque</button>
@@ -999,7 +989,7 @@ async function openCronogramaModuloModal(submoduloId, submoduloNombre) {
       body.querySelector('#tab-c1').onclick = () => { currentCuatrimestre = 1; renderTable(1); };
       body.querySelector('#tab-c2').onclick = () => { currentCuatrimestre = 2; renderTable(2); };
       body.querySelectorAll('.trayecto-tab').forEach(btn => {
-        btn.onclick = () => { selectedTrayectoId = btn.dataset.id; renderTable(currentCuatrimestre); };
+        btn.onclick = () => { /* Ya no es necesario */ };
       });
       body.querySelector('#btn-config-disponibilidad-modal').onclick = () => openDisponibilidadModal(profId, cuatrimestre);
       const btnAdd = body.querySelector('#btn-add-slot-modal');
