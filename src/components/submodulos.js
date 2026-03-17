@@ -901,8 +901,8 @@ async function openCronogramaModuloModal(submoduloId, submoduloNombre) {
             <thead>
               <tr>
                 <th class="th-dia">Día</th>
-                <th class="th-disp">Entrada</th>
-                <th class="th-disp">Salida</th>
+                <th class="th-disp" title="Horario de entrada del profesor">Entrada Prof.</th>
+                <th class="th-disp" title="Horario de salida del profesor">Salida Prof.</th>
                 <th class="th-eventual">Horario Eventual</th>
                 <th class="th-turno">Mañana</th>
                 <th class="th-turno">Tarde</th>
