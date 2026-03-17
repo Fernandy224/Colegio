@@ -878,13 +878,12 @@ async function openCronogramaModuloModal(submoduloId, submoduloNombre) {
 
       const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
       // Ya no filtramos por trayecto individual en las pestañas
-      misHorarios = allHorarios.filter(h => h.cuatrimestre === cuatrimestre && h.anio === anio);
+      const misHorarios = allHorarios.filter(h => h.cuatrimestre === cuatrimestre && h.anio === anio);
 
       body.innerHTML = `
         <div class="tabs" style="margin-bottom: 20px;">
           <button class="tab-btn ${cuatrimestre === 1 ? 'active' : ''}" id="tab-c1">1° Cuatrimestre</button>
           <button class="tab-btn ${cuatrimestre === 2 ? 'active' : ''}" id="tab-c2">2° Cuatrimestre</button>
-          <div style="flex:1"></div>
           <div style="flex:1"></div>
           <button class="btn btn-secondary" id="btn-config-disponibilidad-modal" style="margin-right:8px;">${icons.calendar} Mi Disponibilidad</button>
           <button class="btn btn-add" id="btn-add-slot-modal">${icons.plus} Agregar Bloque</button>
