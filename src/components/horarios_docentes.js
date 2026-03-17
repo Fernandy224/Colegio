@@ -114,7 +114,7 @@ function renderVistaPrincipal(container) {
                 <td class="td-dia-label">${dias[diaId-1]}</td>
                 <td class="td-disp-val">${misDisp.map(d => d.hora_entrada.substring(0,5)).join('<br>') || '-'}</td>
                 <td class="td-disp-val">${misDisp.map(d => d.hora_salida.substring(0,5)).join('<br>') || '-'}</td>
-                <td class="td-eventual-val"></td>
+                <td class="td-eventual-val">${misHorarios.filter(h => h.horario_eventual).map(h => sanitize(h.horario_eventual)).join('<br>') || '-'}</td>
                 <td class="td-turno-val">${bloquesManana.map(renderBloque).join('')}</td>
                 <td class="td-turno-val">${bloquesTarde.map(renderBloque).join('')}</td>
                 <td class="td-turno-val">${bloquesVespertino.map(renderBloque).join('')}</td>
@@ -267,6 +267,10 @@ async function openFormModal(existing = null) {
       </div>
     </div>
     <div class="form-group">
+      <label class="form-label">Horario Eventual / Excepcional</label>
+      <input type="text" class="form-input" id="h-eventual" value="${sanitize(existing?.horario_eventual || '')}" placeholder="Ej: Clases sábados cada 15 días, etc." />
+    </div>
+    <div class="form-group">
       <label class="form-label">Observaciones (Opcional)</label>
       <textarea class="form-input" id="h-observaciones" placeholder="Detalles adicionales..." style="min-height:80px;">${sanitize(existing?.observaciones || '')}</textarea>
     </div>
@@ -288,6 +292,7 @@ async function openFormModal(existing = null) {
     const dia_semana = parseInt(document.getElementById('h-dia').value);
     const hora_inicio = document.getElementById('h-inicio').value;
     const hora_fin = document.getElementById('h-fin').value;
+    const horario_eventual = document.getElementById('h-eventual').value.trim() || null;
     const anio = getCurrentYear();
     const cuatrimestre = currentCuatrimestre;
 
@@ -341,7 +346,7 @@ async function openFormModal(existing = null) {
     btn.textContent = 'Guardando...';
 
     try {
-      const payload = { trayecto_id, grupo_comision, aula, observaciones, dia_semana, hora_inicio, hora_fin, anio, cuatrimestre };
+      const payload = { trayecto_id, grupo_comision, aula, observaciones, dia_semana, hora_inicio, hora_fin, anio, cuatrimestre, horario_eventual };
       if (isEdit) {
         await update('horarios_docentes', existing.id, payload);
         showToast('Bloque actualizado.');
