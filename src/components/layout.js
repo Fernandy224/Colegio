@@ -15,7 +15,7 @@ const navItems = [
   { id: 'submodulos', label: 'Mód. Comunes', icon: 'submodulos', roles: ['administrador', 'profesor'] },
   { id: 'aprobaciones', label: 'Aprobaciones', icon: 'aprobaciones', roles: ['administrador', 'profesor'] },
   { id: 'reportes', label: 'Reportes', icon: 'reportes', roles: ['administrador'] },
-  { id: 'plantillas_actas', label: 'Plantillas de Actas', icon: 'actas', roles: ['administrador'] },
+  { id: 'plantillas_actas', label: 'Plantillas de Actas', icon: 'actas', roles: ['administrador', 'profesor'] },
   { id: 'usuarios', label: 'Usuarios', icon: 'settings', roles: ['administrador'] }
 ];
 
