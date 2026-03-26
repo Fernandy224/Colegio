@@ -486,6 +486,30 @@ async function generarPDF(data) {
     // Imagen con margen superior
     doc.addImage(encabezado.data, encabezado.type, 0, marginTop, imgWidth, imgHeight);
     
+    // MAGIA: El PNG original tiene el texto "Seguridad e Higiene Laboral" incrustado en la caja derecha.
+    // La caja derecha empieza aprox al 69.3% del ancho.
+    // Vamos a pintar un rectángulo blanco encima para tapar ese texto y escribir el nombre real del módulo.
+    const rightBoxX = imgWidth * 0.693;
+    const rightBoxW = imgWidth - rightBoxX;
+    
+    // Pintamos rectángulo blanco con borde negro tenue para que coincida con el estilo
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.3);
+    doc.rect(rightBoxX, marginTop, rightBoxW, imgHeight, 'FD');
+
+    // Escribimos el nombre del módulo dinámicamente
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 0, 0);
+    doc.text('Evaluación por estudiante', rightBoxX + 4, marginTop + 6);
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    const modTitle = data.modulo ? data.modulo.nombre : 'Módulo General';
+    const numLines = doc.splitTextToSize(modTitle.toUpperCase(), rightBoxW - 8);
+    doc.text(numLines, rightBoxX + 4, marginTop + 12);
+
     // El contenido arranca debajo con margen
     cursorY = marginTop + imgHeight + 8;
   } else {
@@ -689,7 +713,17 @@ function imprimirModeloActa(_ctx, desempenosLista, capacidadesLista, declaracion
 
   const paginaHTML = `
     <div class="acta-pagina">
-      <img src="/imagenes/encabezado-acta.png" style="width:100%;display:block;" onerror="this.style.display='none'" />
+      <div style="position:relative; width:100%;">
+        <img src="/imagenes/encabezado-acta.png" style="width:100%;display:block;" onerror="this.style.display='none'" />
+        
+        <!-- PARCHE MAGICO: tapar la caja derecha del PNG ("Seguridad e Higiene") -->
+        <div style="position:absolute; top:0; right:0; width:30.7%; height:100%; background:#fff; border: 2px solid #000; border-left: 1.5px solid #000; box-sizing:border-box; display:flex; flex-direction:column; padding: 8px 10px;">
+          <strong style="font-size:11.5pt; margin-bottom:8px; font-family:Arial,sans-serif; color:#000;">Evaluación por estudiante</strong>
+          <span style="font-size:10pt; font-family:Arial,sans-serif; color:#000; line-height:1.2;">
+            ${(_ctx?.modulo?.nombre || 'Módulo General').toUpperCase()}
+          </span>
+        </div>
+      </div>
 
       <table style="width:100%;border-collapse:collapse;margin-top:12px;font-family:Arial,sans-serif;font-size:10.5pt;">
         <tr>
