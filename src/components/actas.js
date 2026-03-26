@@ -488,20 +488,21 @@ async function generarPDF(data) {
     
     // MAGIA: El PNG original tiene el texto "Seguridad e Higiene Laboral" incrustado en la caja derecha.
     // Ajustado a 69.5% para que la línea izquierda pise exactamente la original.
-    // Ajustado para que calce exactamente (la imagen tiene padding abajo y a la derecha).
-    const rightBoxX = imgWidth * 0.695;
-    const rightBoxW = imgWidth * 0.288;
-    const rectHeight = imgHeight * 0.88;
+    // Ajustado milimétricamente basado en el feedback visual (margen superior y derecho reales del PNG).
+    const rightBoxX = imgWidth * 0.697;
+    const rightBoxW = imgWidth * 0.285;
+    const marginY = imgHeight * 0.015;
+    const rectHeight = imgHeight * 0.85;
     
     // Pintamos rectángulo blanco con borde negro tenue para que coincida con el estilo
     doc.setFillColor(255, 255, 255);
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.35); // Grosor ligeramente mayor para tapar bien la línea
-    doc.rect(rightBoxX, marginTop, rightBoxW, rectHeight, 'FD');
+    doc.rect(rightBoxX, marginTop + marginY, rightBoxW, rectHeight, 'FD');
 
     // Centrado vertical dinámico
     const centerX = rightBoxX + (rightBoxW / 2);
-    const centerY = marginTop + (rectHeight / 2);
+    const centerY = marginTop + marginY + (rectHeight / 2);
     
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
@@ -729,7 +730,7 @@ function imprimirModeloActa(_ctx, desempenosLista, capacidadesLista, declaracion
         <img src="/imagenes/encabezado-acta.png" style="width:100%;display:block;" onerror="this.style.display='none'" />
         
         <!-- PARCHE MAGICO: tapar la caja derecha del PNG ("Seguridad e Higiene"). Ajustado ancho, alto y márgenes. -->
-        <div style="position:absolute; top:0; right:1.5%; width:29%; height:88%; background:#fff; border: 1.5px solid #000; border-left: 1.5px solid #000; box-sizing:border-box; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding: 2px 6px;">
+        <div style="position:absolute; top:1.8%; right:1.5%; width:28.5%; height:85%; background:#fff; border: 1.5px solid #000; border-left: 1.5px solid #000; box-sizing:border-box; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding: 2px 6px;">
           <strong style="font-size:11.5pt; margin-bottom:4px; font-family:Arial,sans-serif; color:#000;">Evaluación por estudiante</strong>
           <span style="font-size:10pt; font-family:Arial,sans-serif; color:#000; line-height:1.2;">
             ${(_ctx?.modulo?.nombre || 'Módulo General').toUpperCase()}
