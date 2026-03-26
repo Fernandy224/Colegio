@@ -59,6 +59,9 @@ function buildAsistenciaHTML(tipo, contextId, estudiantes, fechasClase, registro
           <span style="font-size:0.8rem;color:var(--text-muted);">
             ${fechasClase.length} clase${fechasClase.length !== 1 ? 's' : ''} registrada${fechasClase.length !== 1 ? 's' : ''}
           </span>
+          <span style="font-size:0.8rem;color:var(--text-muted);padding-left:8px;border-left:1px solid var(--border-color);">
+            👥 ${estudiantes.length} estudiante${estudiantes.length !== 1 ? 's' : ''}
+          </span>
         </div>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-secondary" id="btn-exportar-excel" title="Exportar a Excel">
@@ -111,6 +114,16 @@ function buildAsistenciaHTML(tipo, contextId, estudiantes, fechasClase, registro
         letter-spacing: 0.4px;
         border-bottom: 1px solid var(--border-color);
         white-space: nowrap;
+      }
+      .asistencia-table th.col-num,
+      .asistencia-table td.col-num {
+        text-align: center;
+        font-size: 0.72rem;
+        color: var(--text-muted);
+        font-weight: 600;
+        width: 36px;
+        min-width: 36px;
+        padding: 8px 4px;
       }
       .asistencia-table th.col-estudiante {
         text-align: left;
@@ -289,7 +302,7 @@ function buildTabla(estudiantes, fechasClase, registros) {
     </th>
     `}).join('');
 
-  const rows = estudiantes.map(est => {
+  const rows = estudiantes.map((est, index) => {
     const rowRegistros = registros.filter(r => r.estudiante_id === est.id);
     const presentes = rowRegistros.filter(r => r.presente).length;
     const totalClases = fechasClase.length;
@@ -315,6 +328,7 @@ function buildTabla(estudiantes, fechasClase, registros) {
 
     return `
       <tr>
+        <td class="col-num">${index + 1}</td>
         <td class="col-estudiante">
           <div style="display:flex;align-items:center;gap:8px;">
             <div style="width:28px;height:28px;border-radius:999px;background:var(--gradient-primary);display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:700;color:white;flex-shrink:0;">
@@ -347,6 +361,7 @@ function buildTabla(estudiantes, fechasClase, registros) {
       <table class="asistencia-table">
         <thead>
           <tr>
+            <th class="col-num">#</th>
             <th class="col-estudiante">Estudiante</th>
             ${headFechas}
             <th>% Asistencia</th>
