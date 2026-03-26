@@ -74,29 +74,29 @@ export async function openGenerarActaModal(submoduloId, submoduloNombre) {
           </button>
         </div>
       </div>
-      <div class="modal-body" id="actas-modal-body">
-        ${!plantilla ? `
-          <div style="padding:32px;text-align:center;">
-            <div style="font-size:2.5rem;margin-bottom:12px;">📋</div>
-            <h3 style="margin-bottom:8px;">Este módulo no tiene una plantilla de acta asignada</h3>
-            <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:20px;">
-              Para generar un acta personalizada, seleccioná una plantilla existente o creá una nueva desde "Plantillas de Actas".
-            </p>
-            ${todasLasPlantillas.length > 0 ? `
-              <div style="display:flex;flex-direction:column;gap:10px;max-width:400px;margin:0 auto;">
-                <select id="select-plantilla-init" class="form-input" style="font-size:0.9rem;">
+      <div class="modal-body" id="actas-modal-body" style="position:relative;">
+        <div id="actas-banner-container">
+          ${!plantilla ? `
+            <div style="background:rgba(251, 191, 36, 0.1); border:1px solid rgba(251, 191, 36, 0.3); border-radius:8px; padding:12px 16px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; gap:16px;">
+              <div>
+                <strong style="color:var(--accent-yellow); font-size:0.9rem;">⚠️ Sin plantilla asignada</strong>
+                <div style="font-size:0.8rem; color:var(--text-muted); margin-top:4px;">
+                  Seleccioná una plantilla para evaluar los desempeños, o cerrá y asigná una desde la configuración del módulo.
+                </div>
+              </div>
+              <div style="display:flex; gap:8px; min-width:250px;">
+                <select id="select-plantilla-banner" class="form-input" style="font-size:0.85rem; padding:6px 10px;">
                   <option value="">— Elegir plantilla —</option>
                   ${todasLasPlantillas.map(p => `<option value="${p.id}">${sanitize(p.nombre)}</option>`).join('')}
                 </select>
-                <button class="btn btn-primary" id="btn-usar-plantilla">Usar esta plantilla →</button>
+                <button class="btn btn-primary" id="btn-usar-plantilla" style="padding:6px 12px; font-size:0.85rem; white-space:nowrap;">Aplicar</button>
               </div>
-            ` : `
-              <p style="color:var(--accent-yellow,#fbbf24);font-size:0.85rem;">
-                No hay plantillas creadas todavía. Andá a <strong>Plantillas de Actas</strong> para crear una.
-              </p>
-            `}
-          </div>
-        ` : '<div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando estudiantes...</div>'}
+            </div>
+          ` : ''}
+        </div>
+        <div id="actas-content-area">
+          <div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando estudiantes...</div>
+        </div>
       </div>
     </div>
   `;
@@ -119,10 +119,10 @@ export async function openGenerarActaModal(submoduloId, submoduloNombre) {
     }
   });
 
-  // Si no tiene plantilla, manejar la selección inicial
+  // Si no tiene plantilla, manejar la selección desde el banner
   if (!plantilla) {
     overlay.querySelector('#btn-usar-plantilla')?.addEventListener('click', async () => {
-      const sel = overlay.querySelector('#select-plantilla-init');
+      const sel = overlay.querySelector('#select-plantilla-banner');
       const pId = sel?.value;
       if (!pId) { showToast('Elegí una plantilla primero', 'error'); return; }
       const selPlantilla = todasLasPlantillas.find(p => p.id === pId);
@@ -130,14 +130,17 @@ export async function openGenerarActaModal(submoduloId, submoduloNombre) {
       activosDesempenos = selPlantilla.desempenos || [];
       activeCapacidades = selPlantilla.capacidades || [];
       activeDeclaracion = selPlantilla.declaracion || DECLARACION_DEFAULT;
-      // Mostrar spinner y cargar estudiantes
-      overlay.querySelector('#actas-modal-body').innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando estudiantes...</div>';
+      
+      // Ocultar banner y actualizar UI
+      overlay.querySelector('#actas-banner-container').innerHTML = '';
       overlay.querySelector('h3.modal-title').innerHTML = `📄 Generación de Actas — ${submoduloNombre} <span style="font-size:0.75rem;font-weight:400;color:var(--text-muted);">(Plantilla: ${sanitize(selPlantilla.nombre)})</span>`;
       const printBtn = overlay.querySelector('#btn-imprimir-modelo');
       if (printBtn) printBtn.style.display = 'flex';
+      
+      // Recargar estudiantes
+      overlay.querySelector('#actas-content-area').innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando estudiantes...</div>';
       await iniciarCargaEstudiantes();
     });
-    return; // esperar selección
   }
 
   const iniciarCargaEstudiantes = () =>
@@ -156,7 +159,7 @@ async function _doLoadEstudiantes(overlay, submoduloId, activosDesempenos, activ
     const todosTrayectos = await fetchAll('trayectos_formativos');
     const trayectosAsociados = todosTrayectos.filter(t => trayectosIds.includes(t.id));
 
-    const body = overlay.querySelector('#actas-modal-body');
+    const body = overlay.querySelector('#actas-content-area');
 
     if (trayectosAsociados.length === 0) {
       body.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-muted);">Este módulo no está asociado a ningún trayecto formativo.</div>`;
@@ -317,6 +320,11 @@ async function _doLoadEstudiantes(overlay, submoduloId, activosDesempenos, activ
           let siCount = 0;
           let noCount = 0;
           let notCompleted = false;
+
+          if (activosDesempenos.length === 0) {
+             showToast('⚠️ Seleccioná una plantilla en el banner superior antes de generar el acta.', 'warning');
+             return;
+          }
 
           activosDesempenos.forEach((crit, idx) => {
              const selected = row.querySelector(`input[name="des_${inscId}_${idx}"]:checked`);
