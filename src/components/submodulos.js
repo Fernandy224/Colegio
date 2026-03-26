@@ -88,8 +88,9 @@ export async function renderSubmodulos() {
                     <button class="btn btn-secondary cronograma-submodulo-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
                       🗓️ Cronograma
                     </button>
-                    <button class="btn btn-secondary acta-submodulo-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
-                      📄 Acta
+                    <button class="btn btn-secondary acta-submodulo-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}"
+                      style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;${!sub.plantilla_acta_id ? 'background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.35);color:#fbbf24;' : ''}">
+                      ${sub.plantilla_acta_id ? '📄 Acta' : '📋 Crear Acta'}
                     </button>
                     <button class="btn btn-secondary informe-grupal-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
                       📊 Informe
