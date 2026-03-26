@@ -497,18 +497,28 @@ async function generarPDF(data) {
     doc.setLineWidth(0.35); // Grosor ligeramente mayor para tapar bien la línea
     doc.rect(rightBoxX, marginTop, rightBoxW, imgHeight, 'FD');
 
-    // Escribimos el nombre del módulo dinámicamente y centrado
+    // Centrado vertical dinámico
     const centerX = rightBoxX + (rightBoxW / 2);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(0, 0, 0);
-    doc.text('Evaluación por estudiante', centerX, marginTop + 6, { align: 'center' });
+    const centerY = marginTop + (imgHeight / 2);
     
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     const modTitle = data.modulo ? data.modulo.nombre : 'Módulo General';
-    const numLines = doc.splitTextToSize(modTitle.toUpperCase(), rightBoxW - 8);
-    doc.text(numLines, centerX, marginTop + 11.5, { align: 'center' });
+    const numLines = doc.splitTextToSize(modTitle.toUpperCase(), rightBoxW - 4);
+    
+    // Altura del bloque: título (1) + numLines.length.  Interlineado aprox 5mm.
+    const totalLines = 1 + numLines.length;
+    let textY = centerY - ((totalLines * 5) / 2) + 3.5; // Offset de baseline
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 0, 0);
+    doc.text('Evaluación por estudiante', centerX, textY, { align: 'center' });
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    textY += 5; // Separador entre título y submódulo
+    doc.text(numLines, centerX, textY, { align: 'center' });
 
     // El contenido arranca debajo con margen
     cursorY = marginTop + imgHeight + 8;
@@ -716,9 +726,9 @@ function imprimirModeloActa(_ctx, desempenosLista, capacidadesLista, declaracion
       <div style="position:relative; width:100%;">
         <img src="/imagenes/encabezado-acta.png" style="width:100%;display:block;" onerror="this.style.display='none'" />
         
-        <!-- PARCHE MAGICO: tapar la caja derecha del PNG ("Seguridad e Higiene"). Ajustado ancho y centrado. -->
-        <div style="position:absolute; top:0; right:0; width:30.5%; height:100%; background:#fff; border: 1.5px solid #000; border-left: 1.5px solid #000; box-sizing:border-box; display:flex; flex-direction:column; padding: 10px 6px; align-items:center; text-align:center;">
-          <strong style="font-size:11.5pt; margin-bottom:8px; font-family:Arial,sans-serif; color:#000;">Evaluación por estudiante</strong>
+        <!-- PARCHE MAGICO: tapar la caja derecha del PNG ("Seguridad e Higiene"). Ajustado ancho y centrado V y H. -->
+        <div style="position:absolute; top:0; right:0; width:30.5%; height:100%; background:#fff; border: 1.5px solid #000; border-left: 1.5px solid #000; box-sizing:border-box; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding: 2px 6px;">
+          <strong style="font-size:11.5pt; margin-bottom:4px; font-family:Arial,sans-serif; color:#000;">Evaluación por estudiante</strong>
           <span style="font-size:10pt; font-family:Arial,sans-serif; color:#000; line-height:1.2;">
             ${(_ctx?.modulo?.nombre || 'Módulo General').toUpperCase()}
           </span>
