@@ -341,6 +341,15 @@ function openSubmoduloModal(submodulo, modulos, profesores = []) {
   const myProfesor = profesores.find(p => p.auth_id === authUser?.id);
   const selectedProfId = isEdit ? (submodulo.profesor_id || '') : (myProfesor?.id || '');
 
+  // Cargo las plantillas de actas de forma asíncrona
+  let plantillasActas = [];
+  const render = async () => {
+    try { plantillasActas = await (await import('../utils/data.js')).fetchAll('plantillas_actas'); } catch {}
+    buildModal();
+  };
+
+  const buildModal = () => {
+
   const formHTML = `
     <div class="form-group">
       <label class="form-label">Nombre del Módulo Común</label>
@@ -380,6 +389,14 @@ function openSubmoduloModal(submodulo, modulos, profesores = []) {
       <label class="form-label">Descripción</label>
       <textarea class="form-textarea" id="sub-desc" placeholder="Descripción...">${isEdit ? sanitize(submodulo.descripcion || '') : ''}</textarea>
     </div>
+    <div class="form-group">
+      <label class="form-label">Plantilla de Acta <span style="color:var(--text-muted);font-size:0.75rem;">(opcional)</span></label>
+      <select class="form-select" id="sub-plantilla">
+        <option value="">Sin plantilla (usa desempeños de Seguridad)</option>
+        ${plantillasActas.map(p => `<option value="${p.id}" ${isEdit && submodulo.plantilla_acta_id === p.id ? 'selected' : ''}>${sanitize(p.nombre)}</option>`).join('')}
+      </select>
+      <p style="font-size:0.72rem;color:var(--text-muted);margin-top:4px;">Al generar un Acta para este módulo, se usará esta plantilla.</p>
+    </div>
   `;
 
   const footerHTML = `
@@ -395,22 +412,25 @@ function openSubmoduloModal(submodulo, modulos, profesores = []) {
     const modulo_id = document.getElementById('sub-modulo').value || null;
     const profesor_id = document.getElementById('sub-profesor').value || null;
     const descripcion = document.getElementById('sub-desc').value.trim();
+    const plantilla_acta_id = document.getElementById('sub-plantilla').value || null;
 
     if (!nombre) { showToast('Ingresá el nombre del módulo común', 'error'); return; }
 
     try {
       if (isEdit) {
-        await update('submodulos', submodulo.id, { nombre, modulo_id, profesor_id, descripcion });
+        await update('submodulos', submodulo.id, { nombre, modulo_id, profesor_id, descripcion, plantilla_acta_id });
         showToast('Módulo común actualizado');
       } else {
         const authUser = getCurrentUser();
-        await create('submodulos', { nombre, modulo_id, profesor_id, descripcion, created_by: authUser?.id || null });
+        await create('submodulos', { nombre, modulo_id, profesor_id, descripcion, created_by: authUser?.id || null, plantilla_acta_id });
         showToast('Módulo común creado');
       }
       overlay.remove();
       renderSubmodulos();
     } catch (err) { showToast(err.message || 'Error al guardar. Verificá tu sesión.', 'error'); }
   });
+  }; // end buildModal
+  render();
 }
 
 // Modal para crear/editar unidad

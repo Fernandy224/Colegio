@@ -3,8 +3,10 @@ import { sanitize, showToast, icons } from '../utils/helpers.js';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getCurrentYear } from '../utils/state.js';
+import { getSupabase } from '../supabaseClient.js';
 
-const DESEMPENOS_LIST = [
+// Desempeños por defecto (compatibilidad con actas antiguas sin plantilla)
+const DESEMPENOS_LEGACY = [
   "Identifica los peligros propios de la actividad.",
   "Identifica y evalúa los riesgos para poder minimizarlos.",
   "Utiliza los EPP adecuados teniendo en cuenta los riesgos.",
@@ -13,18 +15,70 @@ const DESEMPENOS_LIST = [
   "Respeta y aplica las normas de convivencia manteniendo un entorno de trabajo seguro."
 ];
 
+const CAPACIDADES_LEGACY = [
+  "Identificar los riesgos asociados al sector de trabajo.",
+  "Establecer medidas preventivas a corto, mediano y largo plazo."
+];
+
+const DECLARACION_DEFAULT = 'Declaro haber sido informado/a de los resultados de mi evaluación final y haber recibido retroalimentación sobre mi desempeño durante el módulo.';
+
+// Cargar plantilla del submódulo (o null si no tiene)
+async function fetchPlantillaForSubmodulo(submoduloId) {
+  try {
+    const sb = getSupabase();
+    const { data: sub, error } = await sb
+      .from('submodulos')
+      .select('plantilla_acta_id')
+      .eq('id', submoduloId)
+      .single();
+    if (error || !sub?.plantilla_acta_id) return null;
+
+    const { data: plantilla, error: pErr } = await sb
+      .from('plantillas_actas')
+      .select('*')
+      .eq('id', sub.plantilla_acta_id)
+      .single();
+    if (pErr) return null;
+    return plantilla;
+  } catch {
+    return null;
+  }
+}
+
 export async function openGenerarActaModal(submoduloId, submoduloNombre) {
+  // Cargar plantilla asignada al submódulo
+  let plantilla = await fetchPlantillaForSubmodulo(submoduloId);
+  let todasLasPlantillas = [];
+
+  // Si no tiene plantilla asignada, ofrecer selector
+  if (!plantilla) {
+    todasLasPlantillas = await fetchAll('plantillas_actas');
+  }
+
+  const desempenosList = plantilla ? (plantilla.desempenos || []) : DESEMPENOS_LEGACY;
+  const capacidadesList = plantilla ? (plantilla.capacidades || []) : CAPACIDADES_LEGACY;
+  const declaracion = plantilla?.declaracion || DECLARACION_DEFAULT;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal" style="max-width:900px;width:95vw;">
       <div class="modal-header">
-        <h3 class="modal-title">📄 Generación de Actas — ${submoduloNombre}</h3>
-        <button class="modal-close" id="modal-close-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
+        <h3 class="modal-title">📄 Generación de Actas — ${submoduloNombre}${plantilla ? ` <span style="font-size:0.75rem;font-weight:400;color:var(--text-muted);">(Plantilla: ${sanitize(plantilla.nombre)})</span>` : ''}</h3>
+        <div style="display:flex;align-items:center;gap:8px;">
+          ${!plantilla && todasLasPlantillas.length > 0 ? `
+            <select id="select-plantilla" class="form-input" style="font-size:0.8rem;padding:5px 10px;width:auto;">
+              <option value="">Sin plantilla (Seguridad)</option>
+              ${todasLasPlantillas.map(p => `<option value="${p.id}">${sanitize(p.nombre)}</option>`).join('')}
+            </select>
+          ` : ''}
+          <button class="btn btn-secondary" id="btn-imprimir-modelo" style="padding:6px 14px;font-size:0.8rem;display:flex;align-items:center;gap:6px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+            Imprimir Modelo
+          </button>
+          <button class="modal-close" id="modal-close-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
       </div>
       <div class="modal-body" id="actas-modal-body">
         <div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando estudiantes...</div>
@@ -35,6 +89,41 @@ export async function openGenerarActaModal(submoduloId, submoduloNombre) {
 
   overlay.querySelector('#modal-close-btn').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  // Estado compartido para el botón de imprimir
+  let _printContext = null;
+
+  // Cuando cambia la plantilla desde el selector
+  let activosDesempenos = [...desempenosList];
+  let activeCapacidades = [...capacidadesList];
+  let activeDeclaracion = declaracion;
+
+  overlay.querySelector('#select-plantilla')?.addEventListener('change', async (e) => {
+    const pId = e.target.value;
+    if (!pId) {
+      activosDesempenos = [...DESEMPENOS_LEGACY];
+      activeCapacidades = [...CAPACIDADES_LEGACY];
+      activeDeclaracion = DECLARACION_DEFAULT;
+    } else {
+      const sel = todasLasPlantillas.find(p => p.id === pId);
+      if (sel) {
+        activosDesempenos = sel.desempenos || [];
+        activeCapacidades = sel.capacidades || [];
+        activeDeclaracion = sel.declaracion || DECLARACION_DEFAULT;
+      }
+    }
+    // Recargar tab activo
+    const activeTab = overlay.querySelector('.content-tab.active');
+    if (activeTab) await loadTab(activeTab.dataset.trayectoid);
+  });
+
+  overlay.querySelector('#btn-imprimir-modelo').addEventListener('click', () => {
+    if (_printContext) {
+      imprimirModeloActa(_printContext, activosDesempenos, activeCapacidades, activeDeclaracion);
+    } else {
+      showToast('Seleccioná un trayecto primero para imprimir el modelo.', 'error');
+    }
+  });
 
   try {
     const tmcLinks = await fetchAll('trayecto_modulo_comun');
@@ -77,6 +166,17 @@ export async function openGenerarActaModal(submoduloId, submoduloNombre) {
       const insRelev = inscripciones.filter(i => i.trayecto_id === trayectoId);
       const trayectoActual = trayectosAsociados.find(t => t.id === trayectoId);
       const profTrayecto = trayectoActual && trayectoActual.profesor_id ? profesores.find(p => p.id === trayectoActual.profesor_id) : null;
+
+      // Actualizar contexto para impresión
+      _printContext = {
+        trayecto: trayectoActual,
+        profTrayecto,
+        modulo: modActual,
+        profModulo,
+        estudiantes: insRelev.map(i => estudiantes.find(e => e.id === i.estudiante_id)).filter(Boolean),
+        seguimiento,
+        inscripciones: insRelev
+      };
       
       if (insRelev.length === 0) {
         tabContent.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">No hay inscriptos en este trayecto.</div>';
@@ -89,7 +189,6 @@ export async function openGenerarActaModal(submoduloId, submoduloNombre) {
         
         const seg = seguimiento.find(s => s.inscripcion_id === insc.id && s.submodulo_id === submoduloId);
         
-        // Cargar desempeños previos si los hay
         let obs = '';
         let dsp = {};
         if (seg && seg.desempenos) {
@@ -113,7 +212,7 @@ export async function openGenerarActaModal(submoduloId, submoduloNombre) {
               <div>
                 <label style="font-size:0.75rem; color:var(--text-muted); font-weight:bold; text-transform:uppercase;">Evaluación de Desempeños</label>
                 <div style="margin-top: 8px; font-size: 0.85rem;">
-                  ${DESEMPENOS_LIST.map((crit, idx) => `
+                  ${activosDesempenos.map((crit, idx) => `
                     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.05); padding: 6px 0;">
                       <span style="flex:1; padding-right:12px;">${crit}</span>
                       <div style="display:flex; gap: 12px; flex-shrink:0;">
@@ -244,9 +343,30 @@ export async function openGenerarActaModal(submoduloId, submoduloNombre) {
                 profModulo: profModulo,
                 desempenos: dsp,
                 observaciones: obs,
-                condicion: condicionStr
+                condicion: condicionStr,
+                desempenosList: activosDesempenos,
+                capacidadesList: activeCapacidades,
+                declaracion: activeDeclaracion
              });
-             
+
+             // Registrar constancia en historial de documentación del estudiante
+             try {
+               const fechaHoy = new Date().toISOString().slice(0, 10);
+               const nombreDoc = `Acta — ${modActual?.nombre || 'Módulo'} (${trayectoActual?.nombre || 'Trayecto'})`;
+               await create('actas', {
+                 estudiante_id: est.id,
+                 tipo: 'modulo',
+                 nombre: nombreDoc,
+                 descripcion: condicionStr,
+                 archivo_url: '',
+                 fecha: fechaHoy,
+                 grupo_id: trayectoActual?.id || null,
+                 submodulo_id: submoduloId || null
+               });
+             } catch (regErr) {
+               console.warn('[Actas] No se pudo registrar la constancia:', regErr?.message);
+             }
+
              showToast('Acta generada y guardada correctamente.');
           } catch (err) {
              showToast(err.message || 'Error al guardar el acta', 'error');
@@ -390,27 +510,29 @@ async function generarPDF(data) {
   writeUnderlinedBold('DNI:', data.estudiante.dni || '', marginXIndented, cursorY);
   cursorY += 10;
 
-  // Capacidades
+  // Capacidades (dinámicas)
   writeUnderlinedNormal('Capacidad para evaluar:', marginXIndented, cursorY);
   cursorY += 8;
   
+  const caps = data.capacidadesList || CAPACIDADES_LEGACY;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(11);
-  // Bullets with a small dash or dot
-  doc.text('• Identificar los riesgos asociados al sector de trabajo.', marginXIndented + 5, cursorY);
-  cursorY += 6;
-  doc.text('• Establecer medidas preventivas a corto, mediano y largo plazo.', marginXIndented + 5, cursorY);
-  cursorY += 10;
+  caps.forEach(cap => {
+    const lines = doc.splitTextToSize(`• ${cap}`, pageWidth - marginXIndented - 5 - 10);
+    doc.text(lines, marginXIndented + 5, cursorY);
+    cursorY += lines.length * 6;
+  });
+  cursorY += 4;
 
   doc.setFontSize(12);
   writeUnderlinedNormal('Desempeños para evaluar:', marginXIndented, cursorY);
   cursorY += 6;
 
-  // Tabla
-  const tableData = DESEMPENOS_LIST.map((crit, i) => {
+  // Tabla de desempeños (dinámica)
+  const desempenosParaPDF = data.desempenosList || DESEMPENOS_LEGACY;
+  const tableData = desempenosParaPDF.map((crit, i) => {
      let obsText = "";
-     if (i === 0) obsText = data.observaciones || ""; // Print observations in first row only, or distribute? PDF shows observations across entire column.
-     // AutoTable can merge cells or we just leave it in the first row. We will put the raw data here.
+     if (i === 0) obsText = data.observaciones || "";
      return [
        crit,
        data.desempenos[i] === 'SI' ? 'X' : '',
@@ -451,13 +573,12 @@ async function generarPDF(data) {
   
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
+  const declText = data.declaracion || DECLARACION_DEFAULT;
   doc.text('Declaración del estudiante:', marginX, cursorY);
   cursorY += 5;
-  doc.text('"Declaro haber sido informado/a de los resultados de mi evaluación final', marginX, cursorY);
-  cursorY += 5;
-  doc.text('y haber recibido retroalimentación sobre mi desempeño durante el módulo."', marginX, cursorY);
-
-  cursorY += 25;
+  const declLines = doc.splitTextToSize(`"${declText}"`, pageWidth - marginX * 2);
+  doc.text(declLines, marginX, cursorY);
+  cursorY += declLines.length * 5;
 
   // Firmas layout
   const firmW = 50;
@@ -487,4 +608,179 @@ async function generarPDF(data) {
 
   const cleanFilename = `Acta_${mName || 'Modulo'}_${data.estudiante.dni}.pdf`.replace(/[^a-z0-9_.-]/gi, '_');
   doc.save(cleanFilename);
+}
+
+// ============================================
+// RE-GENERAR PDF DESDE HISTORIAL (sin modal abierto)
+// Exportada para uso desde reportes.js
+// ============================================
+export async function generarPDFDesdeHistorial({ estudiante, trayecto, modulo, desempenos, observaciones, condicion }) {
+  const profesores = await fetchAll('profesores');
+
+  const profTrayecto = trayecto?.profesor_id ? profesores.find(p => p.id === trayecto.profesor_id) : null;
+  const modActual = modulo || null;
+  const profModulo = modActual?.profesor_id ? profesores.find(p => p.id === modActual.profesor_id) : null;
+
+  await generarPDF({
+    estudiante,
+    trayecto,
+    profTrayecto,
+    modulo: modActual,
+    profModulo,
+    desempenos,
+    observaciones,
+    condicion
+  });
+}
+
+// ============================================
+// IMPRESIÓN DEL MODELO DE ACTA EN PAPEL (FORMATO EN BLANCO)
+// ============================================
+function imprimirModeloActa(_ctx, desempenosLista, capacidadesLista, declaracionTexto) {
+  const desempsImp = desempenosLista || DESEMPENOS_LEGACY;
+  const capsImp = capacidadesLista || CAPACIDADES_LEGACY;
+  const declImp = declaracionTexto || DECLARACION_DEFAULT;
+
+  const LINEA = '<span style="display:inline-block;border-bottom:1px solid #333;min-width:200px;">&nbsp;</span>';
+  const LINEA_CORTA = '<span style="display:inline-block;border-bottom:1px solid #333;min-width:120px;">&nbsp;</span>';
+
+  const filasDesempenos = desempsImp.map((crit) => `
+    <tr>
+      <td style="padding:6px 8px;font-size:10pt;border:1px solid #999;">${crit}</td>
+      <td style="text-align:center;border:1px solid #999;width:40px;">&nbsp;</td>
+      <td style="text-align:center;border:1px solid #999;width:40px;">&nbsp;</td>
+      <td style="border:1px solid #999;width:160px;padding:5px;">&nbsp;</td>
+    </tr>`).join('');
+
+  const listaCaps = capsImp.map(c => `<li>${c}</li>`).join('');
+
+  const paginaHTML = `
+    <div class="acta-pagina">
+      <img src="/imagenes/encabezado-acta.png" style="width:100%;display:block;" onerror="this.style.display='none'" />
+
+      <table style="width:100%;border-collapse:collapse;margin-top:12px;font-family:Arial,sans-serif;font-size:10.5pt;">
+        <tr>
+          <td style="padding:6px 0;">
+            <strong>Nombre del trayecto formativo:</strong> ${LINEA}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:6px 0;">
+            <strong>Profesora a cargo del trayecto formativo:</strong> ${LINEA}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:6px 0 6px 28px;">
+            <strong>Nombre del módulo:</strong> ${LINEA}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:6px 0 6px 28px;">
+            <strong>Nombre del profesor a cargo del módulo:</strong> ${LINEA}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:6px 0 6px 28px;">
+            <strong>Nombre y apellido del/la estudiante:</strong> ${LINEA}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:6px 0 6px 28px;">
+            <strong>DNI:</strong> ${LINEA_CORTA}
+          </td>
+        </tr>
+      </table>
+
+      <p style="font-family:Arial,sans-serif;font-size:10.5pt;text-decoration:underline;margin:12px 0 4px 28px;">
+        Capacidad para evaluar:
+      </p>
+      <ul style="font-family:Arial,sans-serif;font-size:10pt;margin:0 0 8px 44px;">
+        ${listaCaps}
+      </ul>
+
+      <p style="font-family:Arial,sans-serif;font-size:10.5pt;text-decoration:underline;margin:10px 0 6px 28px;">
+        Desempeños para evaluar:
+      </p>
+
+      <table style="width:calc(100% - 28px);margin-left:28px;border-collapse:collapse;font-family:Arial,sans-serif;">
+        <thead>
+          <tr>
+            <th style="background:#2d2d2d;color:#fff;padding:6px 8px;font-size:9pt;text-align:left;border:1px solid #999;">Desempeño</th>
+            <th style="background:#2d2d2d;color:#fff;padding:6px 8px;font-size:9pt;text-align:center;border:1px solid #999;width:40px;">SI</th>
+            <th style="background:#2d2d2d;color:#fff;padding:6px 8px;font-size:9pt;text-align:center;border:1px solid #999;width:40px;">NO</th>
+            <th style="background:#2d2d2d;color:#fff;padding:6px 8px;font-size:9pt;text-align:left;border:1px solid #999;width:160px;">Observaciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filasDesempenos}
+        </tbody>
+      </table>
+
+      <p style="font-family:Arial,sans-serif;font-size:11pt;font-weight:bold;margin:12px 0 0;">
+        Condición del estudiante:
+        <span style="display:inline-block;border-bottom:1px solid #333;min-width:160px;">&nbsp;</span>
+      </p>
+
+      <p style="font-family:Arial,sans-serif;font-size:9pt;margin:10px 0 4px;">Declaración del estudiante:</p>
+      <p style="font-family:Arial,sans-serif;font-size:9pt;font-style:italic;margin:0;border:1px solid #ccc;padding:7px 12px;border-radius:4px;background:#f9f9f9;">
+        &ldquo;${declImp}&rdquo;
+      </p>
+
+      <div style="display:flex;justify-content:space-between;margin-top:32px;font-family:Arial,sans-serif;font-size:9.5pt;">
+        <div style="text-align:center;width:30%;">
+          <div style="border-top:1px solid #333;padding-top:5px;">Firma del estudiante</div>
+        </div>
+        <div style="text-align:center;width:30%;">
+          <div style="border-top:1px solid #333;padding-top:5px;">Prof. del Trayecto</div>
+        </div>
+        <div style="text-align:center;width:30%;">
+          <div style="border-top:1px solid #333;padding-top:5px;">Prof. del Módulo</div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:center;margin-top:22px;font-family:Arial,sans-serif;font-size:9.5pt;">
+        <div style="text-align:center;width:30%;">
+          <div style="border-top:1px solid #333;padding-top:5px;">Firma de la directora</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const printWindow = window.open('', '_blank', 'width=900,height=700');
+  if (!printWindow) {
+    showToast('El navegador bloqueó la ventana de impresión. Permití ventanas emergentes.', 'error');
+    return;
+  }
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8" />
+      <title>Modelo de Acta</title>
+      <style>
+        @page { size: A4 portrait; margin: 14mm 14mm 18mm 14mm; }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; background: #fff; color: #000; }
+        .acta-pagina { padding: 0; }
+        .no-print { display: none !important; }
+        @media print {
+          body { margin: 0; }
+          .no-print { display: none !important; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="no-print" style="display:flex!important;justify-content:center;gap:12px;padding:14px;background:#f3f4f6;border-bottom:1px solid #d1d5db;position:sticky;top:0;z-index:99;">
+        <button onclick="window.print()" style="padding:9px 22px;background:#6b2cf5;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600;">🖨️ Imprimir / Guardar PDF</button>
+        <button onclick="window.close()" style="padding:9px 22px;background:#e5e7eb;color:#374151;border:none;border-radius:8px;font-size:14px;cursor:pointer;">✕ Cerrar</button>
+        <span style="font-size:12px;color:#6b7280;align-self:center;">📋 Modelo en blanco para completar a mano</span>
+      </div>
+      <div style="padding: 10px 0;">
+        ${paginaHTML}
+      </div>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
 }
