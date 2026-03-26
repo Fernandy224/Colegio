@@ -55,8 +55,8 @@ export async function openGenerarActaModal(submoduloId, submoduloNombre) {
     todasLasPlantillas = await fetchAll('plantillas_actas');
   }
 
-  const desempenosList = plantilla ? (plantilla.desempenos || []) : DESEMPENOS_LEGACY;
-  const capacidadesList = plantilla ? (plantilla.capacidades || []) : CAPACIDADES_LEGACY;
+  const desempenosList = plantilla ? (plantilla.desempenos || []) : [];
+  const capacidadesList = plantilla ? (plantilla.capacidades || []) : [];
   const declaracion = plantilla?.declaracion || DECLARACION_DEFAULT;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
@@ -65,13 +65,7 @@ export async function openGenerarActaModal(submoduloId, submoduloNombre) {
       <div class="modal-header">
         <h3 class="modal-title">📄 Generación de Actas — ${submoduloNombre}${plantilla ? ` <span style="font-size:0.75rem;font-weight:400;color:var(--text-muted);">(Plantilla: ${sanitize(plantilla.nombre)})</span>` : ''}</h3>
         <div style="display:flex;align-items:center;gap:8px;">
-          ${!plantilla && todasLasPlantillas.length > 0 ? `
-            <select id="select-plantilla" class="form-input" style="font-size:0.8rem;padding:5px 10px;width:auto;">
-              <option value="">Sin plantilla (Seguridad)</option>
-              ${todasLasPlantillas.map(p => `<option value="${p.id}">${sanitize(p.nombre)}</option>`).join('')}
-            </select>
-          ` : ''}
-          <button class="btn btn-secondary" id="btn-imprimir-modelo" style="padding:6px 14px;font-size:0.8rem;display:flex;align-items:center;gap:6px;">
+          <button class="btn btn-secondary" id="btn-imprimir-modelo" style="padding:6px 14px;font-size:0.8rem;display:flex;align-items:center;gap:6px;${!plantilla ? 'display:none;' : ''}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
             Imprimir Modelo
           </button>
@@ -81,7 +75,28 @@ export async function openGenerarActaModal(submoduloId, submoduloNombre) {
         </div>
       </div>
       <div class="modal-body" id="actas-modal-body">
-        <div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando estudiantes...</div>
+        ${!plantilla ? `
+          <div style="padding:32px;text-align:center;">
+            <div style="font-size:2.5rem;margin-bottom:12px;">📋</div>
+            <h3 style="margin-bottom:8px;">Este módulo no tiene una plantilla de acta asignada</h3>
+            <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:20px;">
+              Para generar un acta personalizada, seleccioná una plantilla existente o creá una nueva desde "Plantillas de Actas".
+            </p>
+            ${todasLasPlantillas.length > 0 ? `
+              <div style="display:flex;flex-direction:column;gap:10px;max-width:400px;margin:0 auto;">
+                <select id="select-plantilla-init" class="form-input" style="font-size:0.9rem;">
+                  <option value="">— Elegir plantilla —</option>
+                  ${todasLasPlantillas.map(p => `<option value="${p.id}">${sanitize(p.nombre)}</option>`).join('')}
+                </select>
+                <button class="btn btn-primary" id="btn-usar-plantilla">Usar esta plantilla →</button>
+              </div>
+            ` : `
+              <p style="color:var(--accent-yellow,#fbbf24);font-size:0.85rem;">
+                No hay plantillas creadas todavía. Andá a <strong>Plantillas de Actas</strong> para crear una.
+              </p>
+            `}
+          </div>
+        ` : '<div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando estudiantes...</div>'}
       </div>
     </div>
   `;
@@ -90,34 +105,13 @@ export async function openGenerarActaModal(submoduloId, submoduloNombre) {
   overlay.querySelector('#modal-close-btn').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
-  // Estado compartido para el botón de imprimir
+  // Estado compartido
   let _printContext = null;
-
-  // Cuando cambia la plantilla desde el selector
   let activosDesempenos = [...desempenosList];
   let activeCapacidades = [...capacidadesList];
   let activeDeclaracion = declaracion;
 
-  overlay.querySelector('#select-plantilla')?.addEventListener('change', async (e) => {
-    const pId = e.target.value;
-    if (!pId) {
-      activosDesempenos = [...DESEMPENOS_LEGACY];
-      activeCapacidades = [...CAPACIDADES_LEGACY];
-      activeDeclaracion = DECLARACION_DEFAULT;
-    } else {
-      const sel = todasLasPlantillas.find(p => p.id === pId);
-      if (sel) {
-        activosDesempenos = sel.desempenos || [];
-        activeCapacidades = sel.capacidades || [];
-        activeDeclaracion = sel.declaracion || DECLARACION_DEFAULT;
-      }
-    }
-    // Recargar tab activo
-    const activeTab = overlay.querySelector('.content-tab.active');
-    if (activeTab) await loadTab(activeTab.dataset.trayectoid);
-  });
-
-  overlay.querySelector('#btn-imprimir-modelo').addEventListener('click', () => {
+  overlay.querySelector('#btn-imprimir-modelo')?.addEventListener('click', () => {
     if (_printContext) {
       imprimirModeloActa(_printContext, activosDesempenos, activeCapacidades, activeDeclaracion);
     } else {
@@ -125,6 +119,37 @@ export async function openGenerarActaModal(submoduloId, submoduloNombre) {
     }
   });
 
+  // Si no tiene plantilla, manejar la selección inicial
+  if (!plantilla) {
+    overlay.querySelector('#btn-usar-plantilla')?.addEventListener('click', async () => {
+      const sel = overlay.querySelector('#select-plantilla-init');
+      const pId = sel?.value;
+      if (!pId) { showToast('Elegí una plantilla primero', 'error'); return; }
+      const selPlantilla = todasLasPlantillas.find(p => p.id === pId);
+      if (!selPlantilla) return;
+      activosDesempenos = selPlantilla.desempenos || [];
+      activeCapacidades = selPlantilla.capacidades || [];
+      activeDeclaracion = selPlantilla.declaracion || DECLARACION_DEFAULT;
+      // Mostrar spinner y cargar estudiantes
+      overlay.querySelector('#actas-modal-body').innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted);">Cargando estudiantes...</div>';
+      overlay.querySelector('h3.modal-title').innerHTML = `📄 Generación de Actas — ${submoduloNombre} <span style="font-size:0.75rem;font-weight:400;color:var(--text-muted);">(Plantilla: ${sanitize(selPlantilla.nombre)})</span>`;
+      const printBtn = overlay.querySelector('#btn-imprimir-modelo');
+      if (printBtn) printBtn.style.display = 'flex';
+      await iniciarCargaEstudiantes();
+    });
+    return; // esperar selección
+  }
+
+  const iniciarCargaEstudiantes = () =>
+    _doLoadEstudiantes(overlay, submoduloId, activosDesempenos, activeCapacidades, activeDeclaracion, (ctx) => { _printContext = ctx; });
+
+  await iniciarCargaEstudiantes();
+}
+
+// ============================================
+// LÓGICA INTERNA DE CARGA (scope de openGenerarActaModal)
+// ============================================
+async function _doLoadEstudiantes(overlay, submoduloId, activosDesempenos, activeCapacidades, activeDeclaracion, setPrintContext) {
   try {
     const tmcLinks = await fetchAll('trayecto_modulo_comun');
     const trayectosIds = tmcLinks.filter(l => l.submodulo_id === submoduloId).map(l => l.trayecto_id);
@@ -168,7 +193,7 @@ export async function openGenerarActaModal(submoduloId, submoduloNombre) {
       const profTrayecto = trayectoActual && trayectoActual.profesor_id ? profesores.find(p => p.id === trayectoActual.profesor_id) : null;
 
       // Actualizar contexto para impresión
-      _printContext = {
+      setPrintContext({
         trayecto: trayectoActual,
         profTrayecto,
         modulo: modActual,
@@ -176,7 +201,7 @@ export async function openGenerarActaModal(submoduloId, submoduloNombre) {
         estudiantes: insRelev.map(i => estudiantes.find(e => e.id === i.estudiante_id)).filter(Boolean),
         seguimiento,
         inscripciones: insRelev
-      };
+      });
       
       if (insRelev.length === 0) {
         tabContent.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);">No hay inscriptos en este trayecto.</div>';
@@ -293,7 +318,7 @@ export async function openGenerarActaModal(submoduloId, submoduloNombre) {
           let noCount = 0;
           let notCompleted = false;
 
-          DESEMPENOS_LIST.forEach((crit, idx) => {
+          activosDesempenos.forEach((crit, idx) => {
              const selected = row.querySelector(`input[name="des_${inscId}_${idx}"]:checked`);
              if (selected) {
                  dsp[idx] = selected.value;
