@@ -3,6 +3,8 @@
 // ============================================
 import { icons, showToast, createModal, sanitize } from '../utils/helpers.js';
 import { fetchAll, create, update, remove } from '../utils/data.js';
+import { getCurrentUser } from './auth.js';
+import { getSupabase } from '../supabaseClient.js';
 
 // ============================================
 // RENDER PRINCIPAL
@@ -51,6 +53,14 @@ async function loadPlantillas() {
     grid.innerHTML = plantillas.map(p => buildPlantillaCard(p)).join('');
 
     // Bind eventos
+    grid.querySelectorAll('.btn-asignar-plantilla').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const id = e.currentTarget.dataset.id;
+        const plantilla = plantillas.find(p => p.id === id);
+        if (plantilla) await openAsignarModal(plantilla);
+      });
+    });
+
     grid.querySelectorAll('.btn-editar-plantilla').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         const id = e.currentTarget.dataset.id;
@@ -95,6 +105,9 @@ function buildPlantillaCard(p) {
           </div>
         </div>
         <div style="display:flex;gap:6px;">
+          <button class="btn btn-secondary btn-asignar-plantilla" data-id="${p.id}" style="padding:6px 12px;font-size:0.8rem;background:rgba(139,92,246,0.15);color:var(--accent-purple-light);border-color:rgba(139,92,246,0.3);">
+            ${icons.actas} Asignar
+          </button>
           <button class="btn btn-secondary btn-editar-plantilla" data-id="${p.id}" style="padding:6px 12px;font-size:0.8rem;">
             ${icons.edit} Editar
           </button>
@@ -311,4 +324,126 @@ export async function fetchPlantillasActas() {
   return fetchAll('plantillas_actas');
 }
 
+// ============================================
+// MODAL: ASIGNAR PLANTILLA A MÓDULOS / TRAYECTOS
+// ============================================
+async function openAsignarModal(plantilla) {
+  const authUser = getCurrentUser();
+  const isAdmin = authUser?.role === 'administrador';
+  const sb = getSupabase();
+
+  // Cargar datos en paralelo
+  const [submodulos, trayectos, profesores] = await Promise.all([
+    fetchAll('submodulos'),
+    fetchAll('trayectos_formativos'),
+    fetchAll('profesores'),
+  ]);
+
+  const miProfesor = profesores.find(p => p.auth_id === authUser?.id);
+
+  // Filtrar por profesor si no es admin
+  const misSubmodulos = isAdmin ? submodulos : submodulos.filter(s => s.profesor_id === miProfesor?.id);
+  const misTrayectos = isAdmin ? trayectos : trayectos.filter(t => t.profesor_id === miProfesor?.id);
+
+  const buildTab = (items, tipo) => {
+    if (items.length === 0) {
+      return `<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:0.85rem;">
+        No tenés ${tipo === 'submodulos' ? 'módulos comunes' : 'trayectos'} creados.
+      </div>`;
+    }
+    return items.map(item => {
+      const asignado = item.plantilla_acta_id === plantilla.id;
+      return `
+        <label style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;border:1px solid ${asignado ? 'rgba(139,92,246,0.4)' : 'var(--border-color)'};background:${asignado ? 'rgba(139,92,246,0.08)' : 'transparent'};cursor:pointer;margin-bottom:6px;transition:all 0.15s;">
+          <input type="checkbox" class="asignar-check" data-tipo="${tipo}" data-id="${item.id}" ${asignado ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--accent-purple);cursor:pointer;" />
+          <div>
+            <div style="font-size:0.85rem;font-weight:600;">${sanitize(item.nombre)}</div>
+            ${item.plantilla_acta_id && item.plantilla_acta_id !== plantilla.id
+              ? `<div style="font-size:0.7rem;color:var(--accent-yellow,#fbbf24);">⚠ Ya tiene otra plantilla asignada</div>`
+              : asignado ? `<div style="font-size:0.7rem;color:var(--accent-purple-light);">✓ Usando esta plantilla</div>` : ''}
+          </div>
+        </label>`;
+    }).join('');
+  };
+
+  const contentHTML = `
+    <div style="margin-bottom:12px;font-size:0.85rem;color:var(--text-secondary);">
+      Seleccioná los módulos o trayectos que usarán la plantilla <strong>${sanitize(plantilla.nombre)}</strong>.
+    </div>
+    <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:1px solid var(--border-color);">
+      <button class="tab-btn-asignar active" data-tab="submodulos" style="padding:8px 18px;font-size:0.85rem;font-weight:600;background:none;border:none;border-bottom:2px solid var(--accent-purple);color:var(--accent-purple-light);cursor:pointer;">
+        Módulos Comunes (${misSubmodulos.length})
+      </button>
+      <button class="tab-btn-asignar" data-tab="trayectos" style="padding:8px 18px;font-size:0.85rem;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-muted);cursor:pointer;">
+        Trayectos (${misTrayectos.length})
+      </button>
+    </div>
+    <div id="tab-content-submodulos" style="max-height:45vh;overflow-y:auto;">
+      ${buildTab(misSubmodulos, 'submodulos')}
+    </div>
+    <div id="tab-content-trayectos" style="max-height:45vh;overflow-y:auto;display:none;">
+      ${buildTab(misTrayectos, 'trayectos')}
+    </div>
+  `;
+
+  const footerHTML = `
+    <button class="btn btn-secondary" id="modal-cancel">Cerrar</button>
+    <button class="btn btn-add" id="btn-guardar-asignacion">${icons.save} Guardar Asignaciones</button>
+  `;
+
+  const overlay = createModal(`Asignar Plantilla: ${plantilla.nombre}`, contentHTML, footerHTML, '600px');
+
+  // Tabs
+  overlay.querySelectorAll('.tab-btn-asignar').forEach(btn => {
+    btn.addEventListener('click', () => {
+      overlay.querySelectorAll('.tab-btn-asignar').forEach(b => {
+        b.style.borderBottomColor = 'transparent';
+        b.style.color = 'var(--text-muted)';
+        b.classList.remove('active');
+      });
+      btn.style.borderBottomColor = 'var(--accent-purple)';
+      btn.style.color = 'var(--accent-purple-light)';
+      btn.classList.add('active');
+      overlay.querySelectorAll('[id^="tab-content-"]').forEach(c => c.style.display = 'none');
+      overlay.querySelector(`#tab-content-${btn.dataset.tab}`).style.display = 'block';
+    });
+  });
+
+  overlay.querySelector('#modal-cancel').addEventListener('click', () => overlay.remove());
+
+  overlay.querySelector('#btn-guardar-asignacion').addEventListener('click', async () => {
+    const btn = overlay.querySelector('#btn-guardar-asignacion');
+    btn.disabled = true;
+    btn.textContent = 'Guardando...';
+
+    try {
+      const checks = overlay.querySelectorAll('.asignar-check');
+      const sb2 = getSupabase();
+
+      for (const chk of checks) {
+        const tabla = chk.dataset.tipo === 'submodulos' ? 'submodulos' : 'trayectos_formativos';
+        const id = chk.dataset.id;
+        const checked = chk.checked;
+        const currentItem = (chk.dataset.tipo === 'submodulos' ? submodulos : trayectos).find(x => x.id === id);
+
+        if (checked && currentItem.plantilla_acta_id !== plantilla.id) {
+          // Asignar esta plantilla
+          await sb2.from(tabla).update({ plantilla_acta_id: plantilla.id }).eq('id', id);
+        } else if (!checked && currentItem.plantilla_acta_id === plantilla.id) {
+          // Desasignar (sólo si tiene ESTA plantilla)
+          await sb2.from(tabla).update({ plantilla_acta_id: null }).eq('id', id);
+        }
+      }
+
+      showToast('Asignaciones guardadas ✓');
+      overlay.remove();
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error');
+      btn.disabled = false;
+      btn.innerHTML = `${icons.save} Guardar Asignaciones`;
+    }
+  });
+}
+
 export default { renderPlantillasActas, fetchPlantillasActas };
+
