@@ -486,14 +486,12 @@ async function generarPDF(data) {
     // Imagen con margen superior
     doc.addImage(encabezado.data, encabezado.type, 0, marginTop, imgWidth, imgHeight);
     
-    // MAGIA: El PNG original tiene el texto "Seguridad e Higiene Laboral" incrustado en la caja derecha.
-    // Ajustado a 69.5% para que la línea izquierda pise exactamente la original.
     // Ajustado milimétricamente para caer EXACTO DENTRO del recuadro original, sin pisar las líneas negras.
     // Usaremos solo un relleno blanco ('F'), dejando que el borde negro del PNG original sea el que se vea.
-    const innerX = imgWidth * 0.70; // Apenas a la derecha de la línea divisoria (69.5%)
-    const innerW = imgWidth * 0.27; // Apenas antes de la línea derecha (98%)
-    const innerY = marginTop + (imgHeight * 0.05); // Debajo de la línea superior original
-    const innerH = imgHeight * 0.81; // Arriba de la línea inferior original
+    const innerX = imgWidth * 0.705; // Más a la derecha para no tapar la línea divisoria vertical
+    const innerW = imgWidth * 0.265; // Ancho ligeramente menor para entrar en la caja
+    const innerY = marginTop + (imgHeight * 0.065); // Más abajo para no tapar la línea superior
+    const innerH = imgHeight * 0.78; // Arriba de la línea inferior original
     
     // Relleno blanco transparente para tapar el texto y el casco originales sin sobreescribir bordes externos
     doc.setFillColor(255, 255, 255);
@@ -729,7 +727,7 @@ function imprimirModeloActa(_ctx, desempenosLista, capacidadesLista, declaracion
         <img src="/imagenes/encabezado-acta.png" style="width:100%;display:block;" onerror="this.style.display='none'" />
         
         <!-- PARCHE MAGICO: Un bloque interior puramente blanco (sin borde), que tapa el texto viejo permitiendo que las líneas originales de la imagen hagan de marco real. -->
-        <div style="position:absolute; top:4%; right:2.5%; width:27%; height:82%; background:#fff; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding: 2px;">
+        <div style="position:absolute; top:6.5%; left:70.8%; width:26%; height:78%; background:#fff; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding: 2px;">
           <strong style="font-size:11.5pt; margin-bottom:4px; font-family:Arial,sans-serif; color:#000;">Evaluación por estudiante</strong>
           <span style="font-size:10pt; font-family:Arial,sans-serif; color:#000; line-height:1.2;">
             ${(_ctx?.modulo?.nombre || 'Módulo General').toUpperCase()}
