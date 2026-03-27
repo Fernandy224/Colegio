@@ -488,10 +488,10 @@ async function generarPDF(data) {
     
     // Ajustado milimétricamente para caer EXACTO DENTRO del recuadro original, sin pisar las líneas negras.
     // Usaremos solo un relleno blanco ('F'), dejando que el borde negro del PNG original sea el que se vea.
-    const innerX = imgWidth * 0.705; // Más a la derecha para no tapar la línea divisoria vertical
-    const innerW = imgWidth * 0.265; // Ancho ligeramente menor para entrar en la caja
-    const innerY = marginTop + (imgHeight * 0.065); // Más abajo para no tapar la línea superior
-    const innerH = imgHeight * 0.78; // Arriba de la línea inferior original
+    const innerX = imgWidth * 0.697; // Más a la izquierda para tapar la "Se" asomando, pero sin tocar la línea central.
+    const innerW = imgWidth * 0.282; // Mucho más ancho para tapar el final del casco.
+    const innerY = marginTop + (imgHeight * 0.05); // Lo subimos de vuelta asumiendo un margen superior regular.
+    const innerH = imgHeight * 0.82; // Un poco más alto por las dudas de que asome la patita de "HIGIENE".
     
     // Relleno blanco transparente para tapar el texto y el casco originales sin sobreescribir bordes externos
     doc.setFillColor(255, 255, 255);
@@ -727,7 +727,7 @@ function imprimirModeloActa(_ctx, desempenosLista, capacidadesLista, declaracion
         <img src="/imagenes/encabezado-acta.png" style="width:100%;display:block;" onerror="this.style.display='none'" />
         
         <!-- PARCHE MAGICO: Un bloque interior puramente blanco (sin borde), que tapa el texto viejo permitiendo que las líneas originales de la imagen hagan de marco real. -->
-        <div style="position:absolute; top:6.5%; left:70.8%; width:26%; height:78%; background:#fff; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding: 2px;">
+        <div style="position:absolute; top:5%; left:69.8%; width:28.2%; height:82%; background:#fff; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding: 2px;">
           <strong style="font-size:11.5pt; margin-bottom:4px; font-family:Arial,sans-serif; color:#000;">Evaluación por estudiante</strong>
           <span style="font-size:10pt; font-family:Arial,sans-serif; color:#000; line-height:1.2;">
             ${(_ctx?.modulo?.nombre || 'Módulo General').toUpperCase()}
