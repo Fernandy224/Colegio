@@ -330,60 +330,78 @@ window.toggleActivo = async (id, nuevoEstado) => {
 };
 
 window.resetearPassword = async (userId, nombreUsuario) => {
-  if (!confirm(`¿Estás seguro de que querés generar una nueva contraseña provisoria para "${nombreUsuario}"?\n\nEl usuario deberá cambiarla en su próximo inicio de sesión.`)) return;
-
-  try {
-    const { data: { session } } = await getSupabase().auth.getSession();
-    if (!session) { showToast('Sesión expirada', 'error'); return; }
-
-    const { data, error } = await getSupabase().functions.invoke('reset-user-password', {
-      body: { user_id: userId },
-      headers: { Authorization: `Bearer ${session.access_token}` }
-    });
-
-    if (error) throw error;
-    if (data?.error) throw new Error(data.error);
-
-    // Mostrar la nueva contraseña al admin
-    const pass = data.nueva_password;
-    const modal = document.createElement('div');
-    modal.className = 'modal-overlay';
-    modal.innerHTML = `
-      <div class="modal" style="max-width:440px;">
-        <div class="modal-header">
-          <h3 class="modal-title">🔑 Nueva Contraseña Provisoria</h3>
-          <button class="modal-close" id="reset-modal-close">✕</button>
-        </div>
-        <div class="modal-body">
-          <p style="font-size:0.875rem;color:var(--text-secondary);margin-bottom:16px;">
-            Se generó una nueva contraseña provisoria para <strong>${nombreUsuario}</strong>.
-            El usuario deberá cambiarla al iniciar sesión.
-          </p>
-          <div style="background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.3);border-radius:10px;padding:16px;text-align:center;margin-bottom:16px;">
-            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Contraseña Provisoria</div>
-            <code id="nueva-pass-text" style="font-size:1.5rem;font-weight:700;color:var(--accent-purple-light);letter-spacing:2px;">${pass}</code>
+  const newPass = generarPasswordProvisoria();
+  
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:440px;">
+      <div class="modal-header">
+        <h3 class="modal-title">🔑 Nueva Contraseña</h3>
+        <button class="modal-close" id="reset-modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:0.875rem;color:var(--text-secondary);margin-bottom:16px;">
+          Ingresá o editá la nueva contraseña provisoria para <strong>${nombreUsuario}</strong>.
+          Deberá usarla en su próximo acceso.
+        </p>
+        <div class="form-group">
+          <label class="form-label">Contraseña Provisoria</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" class="form-input" id="edit-reset-password" value="${newPass}"
+              style="font-family:monospace;letter-spacing:1px;flex:1;" />
+            <button type="button" class="btn btn-secondary" style="padding:8px 14px;flex-shrink:0;font-size:0.8rem;"
+              onclick="navigator.clipboard.writeText(document.getElementById('edit-reset-password').value).then(()=>window.showToastGlobal?.('Copiado ✓'))">
+              Copiar
+            </button>
           </div>
-          <button id="btn-copiar-pass" class="btn btn-primary" style="width:100%;">📋 Copiar Contraseña</button>
-          <p style="font-size:0.75rem;color:var(--text-muted);text-align:center;margin-top:12px;">
-            ⚠ Compartí esta contraseña de forma segura. No se puede recuperar después de cerrar esta ventana.
+          <p style="font-size:0.75rem;color:var(--accent-orange);margin-top:6px;">
+            ⚠ Compartí esta contraseña al usuario para que pueda ingresar.
           </p>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:24px;">
+          <button class="btn btn-secondary" id="btn-cancel-reset">Cancelar</button>
+          <button id="btn-confirm-reset" class="btn btn-primary">Asignar Contraseña</button>
         </div>
       </div>
-    `;
-    document.body.appendChild(modal);
+    </div>
+  `;
+  document.body.appendChild(modal);
 
-    modal.querySelector('#reset-modal-close').addEventListener('click', () => modal.remove());
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-    modal.querySelector('#btn-copiar-pass').addEventListener('click', () => {
-      navigator.clipboard.writeText(pass).then(() => {
-        showToast('Contraseña copiada al portapapeles');
-        modal.querySelector('#btn-copiar-pass').textContent = '✓ Copiada';
+  modal.querySelector('#reset-modal-close').addEventListener('click', () => modal.remove());
+  modal.querySelector('#btn-cancel-reset').addEventListener('click', () => modal.remove());
+  
+  const btnGuardar = modal.querySelector('#btn-confirm-reset');
+  btnGuardar.addEventListener('click', async () => {
+    const passwordAEnviar = document.getElementById('edit-reset-password').value;
+    if (!passwordAEnviar || passwordAEnviar.length < 6) {
+      showToast('La contraseña debe tener al menos 6 caracteres', 'error');
+      return;
+    }
+
+    btnGuardar.disabled = true;
+    btnGuardar.textContent = 'Guardando...';
+
+    try {
+      const { data: { session } } = await getSupabase().auth.getSession();
+      if (!session) { showToast('Sesión expirada', 'error'); btnGuardar.disabled = false; return; }
+
+      const { data, error } = await getSupabase().functions.invoke('reset-user-password', {
+        body: { user_id: userId, password: passwordAEnviar },
+        headers: { Authorization: `Bearer ${session.access_token}` }
       });
-    });
 
-  } catch (err) {
-    showToast('Error: ' + err.message, 'error');
-  }
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      showToast(`\u2705 Contraseña actualizada para "${nombreUsuario}".`);
+      modal.remove();
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error');
+      btnGuardar.disabled = false;
+      btnGuardar.textContent = 'Asignar Contraseña';
+    }
+  });
 };
 
 window.eliminarUsuario = (userId, nombreUsuario) => {

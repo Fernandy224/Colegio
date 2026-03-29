@@ -46,7 +46,7 @@ export async function renderEstudiantes() {
     ` : `
       <div class="cards-grid">
         ${estudiantes.map(est => `
-          <div class="card" data-id="${est.id}">
+          <div class="card student-card" data-id="${est.id}" style="cursor: pointer;">
             <div class="card-actions">
               <button class="card-action-btn edit-btn" data-id="${est.id}" title="Editar">${icons.edit}</button>
               <button class="card-action-btn delete card-action-btn-del" data-id="${est.id}" title="Eliminar">${icons.trash}</button>
@@ -110,6 +110,12 @@ export async function renderEstudiantes() {
 
   document.getElementById('btn-add-estudiante')?.addEventListener('click', () => {
     openEstudianteModal();
+  });
+
+  content.querySelectorAll('.student-card').forEach(card => {
+    card.addEventListener('click', () => {
+      openPerfilEstudiante(card.dataset.id);
+    });
   });
 
   content.querySelectorAll('.edit-btn').forEach(btn => {
@@ -232,6 +238,158 @@ function openEstudianteModal(estudiante = null) {
       showToast(err.message || 'Error al guardar', 'error');
     }
   });
+}
+
+async function openPerfilEstudiante(estudianteId) {
+  const [estudiante, inscripciones, allActas, trayectos, submodulos] = await Promise.all([
+    fetchAll('estudiantes', { eq: { id: estudianteId } }).then(res => res[0]),
+    fetchAll('inscripciones', { eq: { estudiante_id: estudianteId } }),
+    fetchAll('actas', { eq: { estudiante_id: estudianteId } }),
+    fetchAll('trayectos_formativos'),
+    fetchAll('submodulos')
+  ]);
+
+  if (!estudiante) return;
+
+  const actasAsociadas = allActas;
+
+  const contentHTML = `
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <div style="display: flex; align-items: center; gap: 16px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color);">
+        <div class="card-avatar student" style="width: 64px; height: 64px; font-size: 1.5rem; background: ${stringToColor(estudiante.nombre + estudiante.apellido)}">
+          ${getInitials(estudiante.nombre, estudiante.apellido)}
+        </div>
+        <div>
+          <h2 style="margin: 0; font-size: 1.5rem;">${sanitize(estudiante.nombre)} ${sanitize(estudiante.apellido)}</h2>
+          <p style="margin: 4px 0 0; color: var(--text-muted);">DNI: ${sanitize(estudiante.dni)} · Ingreso: ${estudiante.anio_ingreso}</p>
+        </div>
+      </div>
+
+      <div class="content-tabs" style="margin-bottom: 0;">
+        <button class="content-tab active" id="tab-btn-docs">📂 Documentación</button>
+        <button class="content-tab" id="tab-btn-trayectos">📚 Trayectos</button>
+      </div>
+
+      <div id="perfil-tab-content" style="min-height: 200px;">
+        <!-- Se cargará por defecto la pestaña de Documentación -->
+      </div>
+    </div>
+  `;
+
+  const overlay = createModal(`Perfil del Estudiante`, contentHTML, '', '650px');
+  const tabContent = overlay.querySelector('#perfil-tab-content');
+
+  const renderDocs = () => {
+    if (actasAsociadas.length === 0) {
+      tabContent.innerHTML = `
+        <div style="padding: 40px; text-align: center; color: var(--text-muted);">
+          <div style="font-size: 2.5rem; margin-bottom: 10px;">📄</div>
+          <p>No hay documentación registrada para este estudiante.</p>
+          <p style="font-size:0.78rem;margin-top:4px;">Los documentos se registran automáticamente al generar actas.</p>
+        </div>
+      `;
+      return;
+    }
+
+    // Ordenar por fecha más reciente primero
+    const actasOrdenadas = [...actasAsociadas].sort((a, b) => {
+      return new Date(b.fecha || b.created_at || 0) - new Date(a.fecha || a.created_at || 0);
+    });
+
+    tabContent.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 14px;">
+        ${actasOrdenadas.map(acta => {
+          const trayecto = trayectos.find(t => t.id === acta.grupo_id);
+          const submodulo = acta.submodulo_id ? submodulos.find(s => s.id === acta.submodulo_id) : null;
+          const condicion = acta.descripcion?.toUpperCase();
+          const condicionColor = condicion === 'APROBADO' ? '#10b981' : condicion === 'DESAPROBADO' ? '#ef4444' : 'var(--text-muted)';
+          const condicionBg = condicion === 'APROBADO' ? 'rgba(16,185,129,0.12)' : condicion === 'DESAPROBADO' ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.05)';
+          const fechaStr = acta.fecha ? formatDate(acta.fecha) : (acta.created_at ? formatDate(acta.created_at) : '');
+
+          return `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 10px; gap: 12px;">
+              <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
+                <div style="color: var(--accent-purple-light); flex-shrink: 0;">${icons.document}</div>
+                <div style="min-width:0;">
+                  <div style="font-weight: 600; font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${sanitize(acta.nombre)}</div>
+                  <div style="font-size: 0.73rem; color: var(--text-muted); margin-top: 2px;">
+                    ${submodulo ? sanitize(submodulo.nombre) : ''}${submodulo && trayecto ? ' · ' : ''}${trayecto ? sanitize(trayecto.nombre) : ''}${fechaStr ? ` · ${fechaStr}` : ''}
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex; align-items:center; gap: 8px; flex-shrink: 0;">
+                ${condicion ? `<span style="font-size:0.72rem;font-weight:700;padding:3px 9px;border-radius:999px;background:${condicionBg};color:${condicionColor};border:1px solid ${condicionColor}33;">${condicion}</span>` : ''}
+                <span style="font-size:0.68rem;padding:3px 8px;border-radius:999px;background:rgba(139,92,246,0.1);color:var(--accent-purple-light);">Acta</span>
+                <button class="btn-eliminar-acta" data-actaid="${acta.id}" title="Eliminar este documento"
+                  style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:3px 8px;cursor:pointer;display:flex;align-items:center;transition:all 0.2s;width:28px;height:28px;justify-content:center;">
+                  ${icons.trash}
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+
+    // Eventos de eliminar
+    tabContent.querySelectorAll('.btn-eliminar-acta').forEach(btn => {
+      btn.addEventListener('mouseenter', () => { btn.style.background = 'rgba(239,68,68,0.25)'; btn.style.borderColor = 'rgba(239,68,68,0.6)'; });
+      btn.addEventListener('mouseleave', () => { btn.style.background = 'rgba(239,68,68,0.1)'; btn.style.borderColor = 'rgba(239,68,68,0.3)'; });
+      btn.addEventListener('click', () => {
+        const actaId = btn.dataset.actaid;
+        confirmDialog('¿Eliminar este documento del historial? <br><small style="color:var(--text-muted)">Esta acción no se puede deshacer.</small>', async () => {
+          try {
+            await remove('actas', actaId);
+            // Actualizar el array local y re-renderizar sin cerrar el modal
+            const idx = actasAsociadas.findIndex(a => a.id === actaId);
+            if (idx !== -1) actasAsociadas.splice(idx, 1);
+            renderDocs();
+            showToast('Documento eliminado correctamente.');
+          } catch (err) {
+            showToast('Error al eliminar: ' + (err.message || 'Intente nuevamente.'), 'error');
+          }
+        });
+      });
+    });
+  };
+
+  const renderTrayectos = () => {
+    if (inscripciones.length === 0) {
+      tabContent.innerHTML = `<div style="padding: 40px; text-align: center; color: var(--text-muted);">No está inscripto en ningún trayecto.</div>`;
+      return;
+    }
+
+    tabContent.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 16px;">
+        ${inscripciones.map(i => {
+          const t = trayectos.find(tray => tray.id === i.trayecto_id);
+          return `
+            <div style="padding: 12px 16px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 10px; display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-weight: 600;">${sanitize(t?.nombre || 'Desconocido')}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Estado: ${i.estado} · Inscrito el ${formatDate(i.fecha_inscripcion)}</div>
+              </div>
+              <span class="badge ${i.estado === 'Activo' || i.estado === 'Regular' ? 'badge-active' : 'badge-approved'}">${i.estado}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  };
+
+  overlay.querySelector('#tab-btn-docs').addEventListener('click', (e) => {
+    overlay.querySelectorAll('.content-tab').forEach(t => t.classList.remove('active'));
+    e.target.classList.add('active');
+    renderDocs();
+  });
+
+  overlay.querySelector('#tab-btn-trayectos').addEventListener('click', (e) => {
+    overlay.querySelectorAll('.content-tab').forEach(t => t.classList.remove('active'));
+    e.target.classList.add('active');
+    renderTrayectos();
+  });
+
+  renderDocs(); // Cargar por defecto
 }
 
 export default { renderEstudiantes };

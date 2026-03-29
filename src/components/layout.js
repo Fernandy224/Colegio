@@ -11,8 +11,9 @@ const navItems = [
   { id: 'estudiantes', label: 'Estudiantes', icon: 'students', roles: ['administrador', 'profesor'] },
   { id: 'profesores', label: 'Profesores', icon: 'professors', roles: ['administrador', 'profesor'] },
   { id: 'trayectos', label: 'Trayectos', icon: 'trayectos', roles: ['administrador', 'profesor'] },
-  { id: 'modulos', label: 'Mód. Específicos', icon: 'modulos', roles: ['administrador', 'profesor'] },
+  // { id: 'modulos', label: 'Mód. Específicos', icon: 'modulos', roles: ['administrador', 'profesor'] }, // Movido a Trayectos
   { id: 'submodulos', label: 'Mód. Comunes', icon: 'submodulos', roles: ['administrador', 'profesor'] },
+  { id: 'cronograma', label: 'Cronograma', icon: 'calendar', roles: ['administrador', 'profesor'] },
   { id: 'aprobaciones', label: 'Aprobaciones', icon: 'aprobaciones', roles: ['administrador', 'profesor'] },
   { id: 'reportes', label: 'Reportes', icon: 'reportes', roles: ['administrador'] },
   { id: 'plantillas_actas', label: 'Plantillas de Actas', icon: 'actas', roles: ['administrador', 'profesor'] },

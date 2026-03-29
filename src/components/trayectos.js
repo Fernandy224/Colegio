@@ -8,6 +8,7 @@ import { fetchAll, create, update, remove } from '../utils/data.js';
 import { getCurrentUser } from './auth.js';
 import { getSupabase } from '../supabaseClient.js';
 import { renderAsistenciaTab, bindAsistenciaEvents } from './asistencia.js';
+import { getCurrentYear } from '../utils/state.js';
 
 let currentView = 'list'; // 'list' | 'detail'
 let selectedTrayectoId = null;
@@ -57,57 +58,155 @@ async function renderTrayectosList() {
         <p class="empty-state-text">Creá un trayecto formativo, asignale módulos y empezá a inscribir estudiantes.</p>
       </div>
     ` : `
-      <div class="cards-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
-        ${trayectos.map(tray => {
-    const prof = profesores.find(p => p.id === tray.profesor_id);
-    const inscriptos = inscripciones.filter(i => i.trayecto_id === tray.id);
-    const modulosTray = modulos.filter(m => m.trayecto_id === tray.id);
-    const isOwner = isAdmin || tray.profesor_id === myProfesor?.id || asignaciones.some(a => a.trayecto_id === tray.id && a.profesor_id === myProfesor?.id);
-    return `
-            <div class="card trayecto-card" data-id="${tray.id}" style="cursor: pointer; align-items: stretch;">
-              <div class="card-actions">
-                ${isOwner ? `
-                  <button class="card-action-btn edit-btn" data-id="${tray.id}" title="Editar">${icons.edit}</button>
-                  <button class="card-action-btn docs-btn" data-id="${tray.id}" title="Documentos">${icons.document}</button>
-                  <button class="card-action-btn delete card-action-btn-del" data-id="${tray.id}" title="Eliminar">${icons.trash}</button>
-                ` : `<span style="font-size:0.6rem;padding:3px 7px;border-radius:999px;background:rgba(139,92,246,0.12);color:var(--text-muted);white-space:nowrap;">Solo lectura</span>`}
+      <div class="trayectos-folders-container" style="display:flex; flex-direction:column; gap:12px;">
+        ${(() => {
+          const groupedTrayectos = {};
+          const sinProfesor = [];
+          
+          trayectos.forEach(tray => {
+            if (tray.profesor_id) {
+              if (!groupedTrayectos[tray.profesor_id]) groupedTrayectos[tray.profesor_id] = [];
+              groupedTrayectos[tray.profesor_id].push(tray);
+            } else {
+              sinProfesor.push(tray);
+            }
+          });
+
+          const generateCardsGrid = (items) => {
+            return `
+              <div class="cards-grid" style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); display: grid;">
+                ${items.map(tray => {
+                  const prof = profesores.find(p => p.id === tray.profesor_id);
+                  const inscriptos = inscripciones.filter(i => i.trayecto_id === tray.id);
+                  const modulosTray = modulos.filter(m => m.trayecto_id === tray.id);
+                  const isOwner = isAdmin || tray.profesor_id === myProfesor?.id || asignaciones.some(a => a.trayecto_id === tray.id && a.profesor_id === myProfesor?.id);
+                  return `
+                    <div class="card trayecto-card" data-id="${tray.id}" style="cursor: pointer; align-items: stretch;">
+                      <div class="card-actions">
+                        ${isOwner ? `
+                          <button class="card-action-btn edit-btn" data-id="${tray.id}" title="Editar">${icons.edit}</button>
+                          <button class="card-action-btn docs-btn" data-id="${tray.id}" title="Documentos">${icons.document}</button>
+                          <button class="card-action-btn delete card-action-btn-del" data-id="${tray.id}" title="Eliminar">${icons.trash}</button>
+                        ` : `<span style="font-size:0.6rem;padding:3px 7px;border-radius:999px;background:rgba(139,92,246,0.12);color:var(--text-muted);white-space:nowrap;">Solo lectura</span>`}
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 12px;">
+                        ${prof && prof.foto_url ? `
+                          <div class="card-avatar" style="width: 52px; height: 52px; flex-shrink: 0; background-image: url('${prof.foto_url}'); background-size: cover; background-position: center; border-radius: 50%;"></div>
+                        ` : `
+                          <div class="card-avatar trayecto" style="width: 52px; height: 52px; flex-shrink: 0;">
+                            ${sanitize(tray.nombre?.charAt(0) || 'T')}
+                          </div>
+                        `}
+                        <div style="min-width: 0;">
+                          <div class="card-name" style="text-align: left;">${sanitize(tray.nombre)}</div>
+                          <div class="card-subtitle" style="text-align: left; margin-top: 2px;">
+                            ${prof ? `Prof. ${sanitize(prof.nombre)} ${sanitize(prof.apellido)}` : 'Sin profesor'}
+                          </div>
+                          <div style="font-size:0.75rem; color:var(--text-muted); margin-top: 4px; display:flex; align-items:center; gap: 4px;">
+                            <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                            ${tray.duracion ? sanitize(tray.duracion) : 'Duración sin definir'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- Módulos Específicos del Trayecto -->
+                      <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.06);" onclick="event.stopPropagation();">
+                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 8px;">
+                          <span style="font-size:0.7rem; text-transform:uppercase; color:var(--text-muted); font-weight:600; letter-spacing:0.5px;">Módulos Específicos <span style="background:rgba(245,158,11,0.15);color:var(--accent-orange);padding:2px 7px;border-radius:999px;font-size:0.65rem;margin-left:4px;">${modulosTray.length}</span></span>
+                          ${isOwner ? `<button class="btn-add-modulo-inline" data-trayecto-id="${tray.id}" data-trayecto-nombre="${sanitize(tray.nombre)}" title="Agregar módulo" style="background:rgba(139,92,246,0.15);color:var(--accent-purple-light);border:none;border-radius:6px;padding:3px 8px;font-size:0.7rem;cursor:pointer;display:flex;align-items:center;gap:4px;font-weight:600;transition:background 0.2s;">
+                            ${icons.plus} Agregar
+                          </button>` : ''}
+                        </div>
+                        ${modulosTray.length === 0 ? `
+                          <p style="font-size:0.75rem; color:var(--text-muted); margin:0; font-style:italic;">Sin módulos específicos</p>
+                        ` : `
+                          <div style="display:flex; flex-direction:column; gap:4px;">
+                            ${modulosTray.map(mod => `
+                              <div style="display:flex; align-items:center; justify-content:space-between; padding:5px 8px; border-radius:6px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
+                                <div style="display:flex; align-items:center; gap:6px; min-width:0;">
+                                  <div style="width:24px;height:24px;border-radius:6px;background:rgba(245,158,11,0.15);display:flex;align-items:center;justify-content:center;font-size:0.6rem;font-weight:700;color:var(--accent-orange);flex-shrink:0;">${sanitize(mod.nombre?.charAt(0) || 'M')}</div>
+                                  <span style="font-size:0.8rem; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${sanitize(mod.nombre)}</span>
+                                </div>
+                                ${isOwner ? `
+                                  <div style="display:flex; gap:2px; flex-shrink:0;">
+                                    <button class="edit-modulo-inline" data-mod-id="${mod.id}" title="Editar" style="background:none;border:none;cursor:pointer;padding:3px;border-radius:4px;color:var(--text-muted);transition:color 0.2s;" onmouseover="this.style.color='var(--accent-blue)'" onmouseout="this.style.color='var(--text-muted)'">
+                                      <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                    </button>
+                                    <button class="delete-modulo-inline" data-mod-id="${mod.id}" data-mod-nombre="${sanitize(mod.nombre)}" title="Eliminar" style="background:none;border:none;cursor:pointer;padding:3px;border-radius:4px;color:var(--text-muted);transition:color 0.2s;" onmouseover="this.style.color='var(--accent-red)'" onmouseout="this.style.color='var(--text-muted)'">
+                                      <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                    </button>
+                                  </div>
+                                ` : ''}
+                              </div>
+                            `).join('')}
+                          </div>
+                        `}
+                      </div>
+
+                      <div class="card-details" style="margin-top: auto; padding-top: 8px;">
+                        <div class="card-detail">
+                          <span class="card-detail-label">Inscriptos</span>
+                          <span class="card-detail-value">${inscriptos.length}</span>
+                        </div>
+                        <div class="card-detail">
+                          <span class="card-detail-label">Mód. Espec.</span>
+                          <span class="card-detail-value">${modulosTray.length}</span>
+                        </div>
+                        <div class="card-detail">
+                          <span class="card-detail-label">Ver detalle</span>
+                          <span class="card-detail-value" style="color: var(--accent-purple-light);">→</span>
+                        </div>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
               </div>
-              <div style="display: flex; align-items: center; gap: 12px;">
-                ${prof && prof.foto_url ? `
-                  <div class="card-avatar" style="width: 52px; height: 52px; flex-shrink: 0; background-image: url('${prof.foto_url}'); background-size: cover; background-position: center; border-radius: 50%;"></div>
-                ` : `
-                  <div class="card-avatar trayecto" style="width: 52px; height: 52px; flex-shrink: 0;">
-                    ${sanitize(tray.nombre?.charAt(0) || 'T')}
-                  </div>
-                `}
-                <div style="min-width: 0;">
-                  <div class="card-name" style="text-align: left;">${sanitize(tray.nombre)}</div>
-                  <div class="card-subtitle" style="text-align: left; margin-top: 2px;">
-                    ${prof ? `Prof. ${sanitize(prof.nombre)} ${sanitize(prof.apellido)}` : 'Sin profesor'}
-                  </div>
-                  <div style="font-size:0.75rem; color:var(--text-muted); margin-top: 4px; display:flex; align-items:center; gap: 4px;">
-                    <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                    ${tray.duracion ? sanitize(tray.duracion) : 'Duración sin definir'}
-                  </div>
+            `;
+          };
+
+          const renderFolder = (title, items, isProf, profDetails) => {
+            if (items.length === 0) return '';
+            return `
+              <div class="folder-group" style="background: rgba(0,0,0,0.1); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden;">
+                <div class="folder-header" style="display:flex; align-items:center; justify-content:space-between; padding: 14px 20px; cursor: pointer; user-select: none; transition: background 0.2s;" onclick="const content = this.nextElementSibling; const isHidden = content.style.display === 'none'; content.style.display = isHidden ? 'block' : 'none'; const icon = this.querySelector('.folder-icon'); icon.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)'; this.style.borderBottom = isHidden ? '1px solid var(--border-color)' : 'none'; this.style.background = isHidden ? 'rgba(255,255,255,0.03)' : 'transparent';">
+                   <div style="display:flex; align-items:center; gap: 14px;">
+                       <svg class="folder-icon" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" style="color:var(--text-muted); transition: transform 0.2s; transform: rotate(0deg);"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                       ${isProf && profDetails?.foto_url ? `<div style="width:34px;height:34px;border-radius:50%;background-image:url('${profDetails.foto_url}');background-size:cover;background-position:center;border:2px solid rgba(255,255,255,0.1);"></div>` : `<div style="width:34px;height:34px;border-radius:8px;background:rgba(139,92,246,0.15);display:flex;align-items:center;justify-content:center;color:var(--accent-purple); border:1px solid rgba(139,92,246,0.3);">${icons.profesores}</div>`}
+                       <span style="font-weight: 600; font-size: 1.05rem; color: var(--text-primary);">${sanitize(title)}</span>
+                   </div>
+                   <div style="font-size: 0.8rem; font-weight:600; color: var(--accent-purple-light); background: rgba(139,92,246,0.15); padding: 4px 10px; border-radius: 20px;">
+                     ${items.length} ${items.length === 1 ? 'Trayecto' : 'Trayectos'}
+                   </div>
+                </div>
+                <div class="folder-content" style="display: none; padding: 20px; background: rgba(0,0,0,0.15);">
+                   ${generateCardsGrid(items)}
                 </div>
               </div>
-              <div class="card-details" style="margin-top: auto;">
-                <div class="card-detail">
-                  <span class="card-detail-label">Inscriptos</span>
-                  <span class="card-detail-value">${inscriptos.length}</span>
-                </div>
-                <div class="card-detail">
-                  <span class="card-detail-label">Mód. Espec.</span>
-                  <span class="card-detail-value">${modulosTray.length}</span>
-                </div>
-                <div class="card-detail">
-                  <span class="card-detail-label">Ver detalle</span>
-                  <span class="card-detail-value" style="color: var(--accent-purple-light);">→</span>
-                </div>
-              </div>
-            </div>
-          `;
-  }).join('')}
+            `;
+          };
+
+          let foldersHTML = '';
+          const profIds = Object.keys(groupedTrayectos);
+          profIds.sort((a,b) => {
+              const pa = profesores.find(p => p.id === a);
+              const pb = profesores.find(p => p.id === b);
+              const nameA = pa ? (pa.nombre + ' ' + (pa.apellido||'')) : '';
+              const nameB = pb ? (pb.nombre + ' ' + (pb.apellido||'')) : '';
+              return nameA.localeCompare(nameB);
+          });
+
+          profIds.forEach(pid => {
+             const prof = profesores.find(p => p.id === pid);
+             const title = prof ? `Prof. ${prof.nombre} ${prof.apellido}` : 'Profesor Desconocido';
+             foldersHTML += renderFolder(title, groupedTrayectos[pid], true, prof);
+          });
+
+          if (sinProfesor.length > 0) {
+             foldersHTML += renderFolder('Sin profesor asignado', sinProfesor, false, null);
+          }
+          
+          return foldersHTML;
+        })()}
       </div>
     `}
   `;
@@ -147,12 +246,14 @@ async function renderTrayectosList() {
     });
   });
 
-  content.querySelectorAll('.docs-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const tray = trayectos.find(t => t.id === btn.dataset.id);
-      if (tray) openDocsModal(tray);
-    });
+  // Documentos
+  document.getElementById('btn-docs')?.addEventListener('click', () => {
+    openDocsModal(trayecto);
+  });
+
+  // Actas Académicas
+  document.getElementById('btn-actas')?.addEventListener('click', () => {
+    openActasGestionModal(trayecto);
   });
 
   content.querySelectorAll('.card-action-btn-del').forEach(btn => {
@@ -166,6 +267,38 @@ async function renderTrayectosList() {
           renderTrayectosList();
         });
       }
+    });
+  });
+
+  // === Módulos Específicos: Agregar desde trayecto ===
+  content.querySelectorAll('.btn-add-modulo-inline').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openModuloDesdeModal(null, btn.dataset.trayectoId, btn.dataset.trayectoNombre);
+    });
+  });
+
+  // === Módulos Específicos: Editar desde trayecto ===
+  content.querySelectorAll('.edit-modulo-inline').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const mod = modulos.find(m => m.id === btn.dataset.modId);
+      if (mod) {
+        const tray = trayectos.find(t => t.id === mod.trayecto_id);
+        openModuloDesdeModal(mod, mod.trayecto_id, tray?.nombre || '');
+      }
+    });
+  });
+
+  // === Módulos Específicos: Eliminar desde trayecto ===
+  content.querySelectorAll('.delete-modulo-inline').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      confirmDialog(`¿Eliminar el módulo <strong>${btn.dataset.modNombre}</strong>?`, async () => {
+        await remove('modulos', btn.dataset.modId);
+        showToast('Módulo eliminado');
+        renderTrayectosList();
+      });
     });
   });
 }
@@ -272,7 +405,8 @@ async function renderTrayectoDetail(trayectoId) {
         </div>
       </div>
       <div class="section-actions">
-        <button class="btn btn-secondary" id="btn-docs">${icons.document} Documentos</button>
+        <button class="btn btn-secondary" id="btn-docs">${icons.document} Archivos</button>
+        <button class="btn btn-secondary" id="btn-actas">${icons.document} Actas Académicas</button>
         ${isOwner ? `
         <button class="btn btn-secondary" id="btn-vincular-comun">${icons.plus} Vincular Mód. Común</button>
         ` : ''}
@@ -771,21 +905,110 @@ function openTrayectoModal(trayecto, profesores) {
   });
 }
 
-function openInscripcionModal(noInscriptos, trayectoId) {
-  if (noInscriptos.length === 0) {
-    showToast('Todos los estudiantes ya están inscriptos', 'error');
-    return;
-  }
+// ============================================
+// MODAL: Crear/Editar Módulo Específico desde Trayecto
+// ============================================
+function openModuloDesdeModal(modulo, trayectoId, trayectoNombre) {
+  const isEdit = !!modulo;
   const formHTML = `
     <div class="form-group">
-      <label class="form-label">Seleccionar Estudiante</label>
-      <select class="form-select" id="insc-estudiante">
-        <option value="">Elegir estudiante...</option>
-        ${noInscriptos.map(e => `<option value="${e.id}">${sanitize(e.nombre)} ${sanitize(e.apellido)} (DNI: ${sanitize(e.dni)})</option>`).join('')}
-      </select>
+      <label class="form-label">Trayecto Formativo</label>
+      <input type="text" class="form-input" value="${sanitize(trayectoNombre)}" disabled style="opacity:0.7;cursor:not-allowed;" />
     </div>
-    <div class="form-group">
-      <label class="form-label">Estado Inicial</label>
+    <div class="form-row">
+      <div class="form-group" style="flex:2;">
+        <label class="form-label">Nombre del Módulo Específico</label>
+        <input type="text" class="form-input" id="mod-inline-nombre" value="${isEdit ? sanitize(modulo.nombre) : ''}" required placeholder="Ej: Programación I" />
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label class="form-label">Año</label>
+        <input type="number" class="form-input" id="mod-inline-anio" value="${isEdit ? (modulo.anio || '') : getCurrentYear()}" placeholder="2026" min="2000" max="2100" />
+      </div>
+    </div>
+  `;
+  const footerHTML = `
+    <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+    <button class="btn btn-primary" id="modal-save">${isEdit ? 'Guardar Cambios' : 'Crear Módulo'}</button>
+  `;
+  const overlay = createModal(
+    isEdit ? 'Editar Módulo Específico' : `Nuevo Módulo — ${sanitize(trayectoNombre)}`,
+    formHTML,
+    footerHTML
+  );
+
+  overlay.querySelector('#modal-cancel').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#modal-save').addEventListener('click', async () => {
+    const nombre = document.getElementById('mod-inline-nombre').value.trim();
+    const anio = parseInt(document.getElementById('mod-inline-anio').value) || null;
+
+    if (!nombre) { showToast('Ingresá el nombre del módulo', 'error'); return; }
+
+    try {
+      if (isEdit) {
+        await update('modulos', modulo.id, { nombre, anio, trayecto_id: trayectoId });
+        showToast('Módulo actualizado');
+      } else {
+        const authUser = getCurrentUser();
+        await create('modulos', { nombre, anio, trayecto_id: trayectoId, created_by: authUser?.id || null });
+        showToast('Módulo creado');
+      }
+      overlay.remove();
+      renderTrayectos();
+    } catch (err) { showToast(err.message || 'Error', 'error'); }
+  });
+}
+
+function openInscripcionModal(noInscriptos, trayectoId) {
+  const formHTML = `
+    <!-- Pestañas del Modal -->
+    <div style="display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:12px;">
+      <button type="button" class="btn tab-inscripcion active" data-tab="existente" style="flex:1;background:rgba(139,92,246,0.15);color:var(--accent-purple-light);border:1px solid rgba(139,92,246,0.3);font-size:0.8rem;">Seleccionar Existente</button>
+      <button type="button" class="btn tab-inscripcion" data-tab="nuevo" style="flex:1;background:transparent;color:var(--text-muted);border:1px solid transparent;font-size:0.8rem;">+ Registrar Nuevo</button>
+    </div>
+
+    <!-- Sección: Existente -->
+    <div id="seccion-existente">
+      ${noInscriptos.length === 0 ? `
+        <div class="empty-state" style="padding:20px 10px;background:rgba(255,255,255,0.02);border-radius:8px;">
+          <p class="empty-state-text" style="font-size:0.85rem;margin:0;">Todos los alumnos están inscriptos.</p>
+        </div>
+      ` : `
+        <div class="form-group">
+          <label class="form-label">Buscar Estudiante</label>
+          <select class="form-select" id="insc-estudiante">
+            <option value="">Elegir estudiante...</option>
+            ${noInscriptos.map(e => `<option value="${e.id}">${sanitize(e.nombre)} ${sanitize(e.apellido)} (DNI: ${sanitize(e.dni)})</option>`).join('')}
+          </select>
+        </div>
+      `}
+    </div>
+
+    <!-- Sección: Nuevo Estudiante -->
+    <div id="seccion-nuevo" style="display:none; padding:12px; background:rgba(255,255,255,0.02); border-radius:8px;">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">DNI</label>
+          <input type="text" class="form-input" id="insc-nuevo-dni" placeholder="Sin puntos" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Año</label>
+          <input type="number" class="form-input" id="insc-nuevo-anio" value="${new Date().getFullYear()}" />
+        </div>
+      </div>
+      <div class="form-row" style="margin-bottom:0;">
+        <div class="form-group">
+          <label class="form-label">Nombre</label>
+          <input type="text" class="form-input" id="insc-nuevo-nombre" placeholder="Nombre" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Apellido</label>
+          <input type="text" class="form-input" id="insc-nuevo-apellido" placeholder="Apellido" required />
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-top:16px;">
+      <label class="form-label">Estado Inicial en el Trayecto</label>
       <select class="form-select" id="insc-estado">
         <option value="En curso">En curso</option>
         <option value="Regular">Regular</option>
@@ -797,17 +1020,81 @@ function openInscripcionModal(noInscriptos, trayectoId) {
     <button class="btn btn-primary" id="modal-save">Inscribir</button>
   `;
   const overlay = createModal('Inscribir Estudiante', formHTML, footerHTML);
+
+  // Lógica de pestañas
+  let modoActual = 'existente';
+  overlay.querySelectorAll('.tab-inscripcion').forEach(btn => {
+    btn.addEventListener('click', () => {
+      overlay.querySelectorAll('.tab-inscripcion').forEach(b => {
+        b.style.background = 'transparent';
+        b.style.color = 'var(--text-muted)';
+        b.style.border = '1px solid transparent';
+      });
+      btn.style.background = 'rgba(139,92,246,0.15)';
+      btn.style.color = 'var(--accent-purple-light)';
+      btn.style.border = '1px solid rgba(139,92,246,0.3)';
+      
+      modoActual = btn.dataset.tab;
+      overlay.querySelector('#seccion-existente').style.display = modoActual === 'existente' ? 'block' : 'none';
+      overlay.querySelector('#seccion-nuevo').style.display = modoActual === 'nuevo' ? 'block' : 'none';
+      
+      // Control del botón guardar si no hay existentes
+      if (modoActual === 'existente' && noInscriptos.length === 0) {
+        overlay.querySelector('#modal-save').disabled = true;
+      } else {
+        overlay.querySelector('#modal-save').disabled = false;
+      }
+    });
+  });
+
+  if (noInscriptos.length === 0) {
+    overlay.querySelector('[data-tab="nuevo"]').click();
+  }
+
   overlay.querySelector('#modal-cancel').addEventListener('click', () => overlay.remove());
+  
   overlay.querySelector('#modal-save').addEventListener('click', async () => {
-    const estudiante_id = document.getElementById('insc-estudiante').value;
     const estado = document.getElementById('insc-estado').value;
-    if (!estudiante_id) { showToast('Seleccioná un estudiante', 'error'); return; }
+    const btnSave = overlay.querySelector('#modal-save');
+    let estudiante_id = null;
+
+    btnSave.disabled = true;
+    btnSave.textContent = 'Guardando...';
+
     try {
+      if (modoActual === 'existente') {
+        estudiante_id = document.getElementById('insc-estudiante')?.value;
+        if (!estudiante_id) { showToast('Seleccioná un estudiante', 'error'); btnSave.disabled = false; btnSave.textContent = 'Inscribir'; return; }
+      } else {
+        const dni = document.getElementById('insc-nuevo-dni').value.trim();
+        const nombre = document.getElementById('insc-nuevo-nombre').value.trim();
+        const apellido = document.getElementById('insc-nuevo-apellido').value.trim();
+        const anio_ingreso = parseInt(document.getElementById('insc-nuevo-anio').value) || new Date().getFullYear();
+
+        if (!dni || !nombre || !apellido) {
+          showToast('DNI, Nombre y Apellido son obligatorios', 'error');
+          btnSave.disabled = false; btnSave.textContent = 'Inscribir'; 
+          return;
+        }
+
+        const estCreado = await create('estudiantes', { dni, nombre, apellido, anio_ingreso, estado: 'Activo' });
+        estudiante_id = estCreado[0]?.id || estCreado.id; 
+      }
+
       await create('inscripciones', { estudiante_id, trayecto_id: trayectoId, estado, fecha_inscripcion: new Date().toISOString().split('T')[0] });
-      showToast('Estudiante inscripto');
+      showToast('Estudiante inscripto con éxito', 'success');
       overlay.remove();
       renderTrayectos();
-    } catch (err) { showToast(err.message || 'Error', 'error'); }
+    } catch (err) { 
+      // Supabase RLS error o duplicate
+      if (err.message?.includes('duplicate key')) {
+        showToast('Error: Ya existe un estudiante con ese DNI.', 'error');
+      } else {
+        showToast(err.message || 'Error al guardar', 'error'); 
+      }
+      btnSave.disabled = false;
+      btnSave.textContent = 'Inscribir';
+    }
   });
 }
 
@@ -1584,6 +1871,184 @@ async function openDocsModal(trayecto) {
 
   loadDocs();
   setupUpload();
+}
+
+// ============================================
+// Gestión de Actas Académicas (Automática)
+// ============================================
+async function openActasGestionModal(trayecto) {
+  const tmcLinks = await fetchAll('trayecto_modulo_comun', { eq: { trayecto_id: trayecto.id } });
+  const submodulosComunes = await Promise.all(tmcLinks.map(l => fetchAll('submodulos', { eq: { id: l.submodulo_id } }).then(r => r[0])));
+  
+  const title = `Actas Académicas: ${sanitize(trayecto.nombre)}`;
+  const contentHTML = `
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <div style="background: rgba(139, 92, 246, 0.05); border: 1px dashed var(--border-color); border-radius: 12px; padding: 20px;">
+        <p style="font-size: 0.875rem; font-weight: 600; margin-bottom: 12px;">Subir Nueva Acta / Certificación</p>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-group">
+            <label class="form-label">Nombre del Acta</label>
+            <input type="text" id="acta-new-nombre" class="form-input" placeholder="Ej: Acta Final Módulo X" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tipo</label>
+            <select id="acta-new-tipo" class="form-select">
+              <option value="trayecto">General del Trayecto</option>
+              <option value="modulo">Específica de Módulo</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group" id="group-submodulo" style="display: none; margin-bottom: 12px;">
+          <label class="form-label">Módulo Asociado</label>
+          <select id="acta-new-submodulo" class="form-select">
+            <option value="">Seleccionar módulo...</option>
+            ${submodulosComunes.filter(Boolean).map(s => `<option value="${s.id}">${sanitize(s.nombre)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label class="form-label">Descripción (Opcional)</label>
+          <textarea id="acta-new-desc" class="form-input" style="min-height: 60px; resize: vertical;" placeholder="Notas sobre esta acta..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Archivo (PDF, Imagen)</label>
+          <input type="file" id="acta-upload-input" class="form-input" accept=".pdf,image/*" />
+        </div>
+        <button class="btn btn-primary" id="btn-save-acta" style="width: 100%; margin-top: 12px;">
+          ${icons.plus} Guardar y Vincular a Alumnos
+        </button>
+        <div id="acta-upload-status" style="font-size: 0.75rem; margin-top: 8px; text-align: center;"></div>
+      </div>
+
+      <div id="actas-list-container">
+        <p style="font-size: 0.875rem; font-weight: 600; margin-bottom: 12px;">Actas Cargadas</p>
+        <div id="actas-list" style="display: flex; flex-direction: column; gap: 10px;">
+           <div style="text-align: center; padding: 20px; color: var(--text-muted);">Cargando...</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const overlay = createModal(title, contentHTML, '', '600px');
+  const typeSelect = overlay.querySelector('#acta-new-tipo');
+  const submoduloGroup = overlay.querySelector('#group-submodulo');
+
+  typeSelect.addEventListener('change', () => {
+    submoduloGroup.style.display = typeSelect.value === 'modulo' ? 'block' : 'none';
+  });
+
+  const loadActas = async () => {
+    const list = overlay.querySelector('#actas-list');
+    try {
+      const { data, error } = await getSupabase()
+        .from('actas')
+        .select('*')
+        .eq('grupo_id', trayecto.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (data.length === 0) {
+        list.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted);">No hay actas cargadas.</div>`;
+        return;
+      }
+
+      list.innerHTML = data.map(acta => `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 8px;">
+          <div>
+            <div style="font-size: 0.875rem; font-weight: 500;">${sanitize(acta.nombre)}</div>
+            <div style="font-size: 0.7rem; color: var(--text-muted);">
+              ${acta.tipo === 'trayecto' ? 'Trayecto' : 'Módulo'} · ${formatDate(acta.fecha)}
+            </div>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <a href="${acta.archivo_url}" target="_blank" class="card-action-btn" title="Ver">${icons.arrowUpRight}</a>
+            <button class="card-action-btn delete delete-acta-btn" data-id="${acta.id}" data-url="${acta.archivo_url}" title="Eliminar">${icons.trash}</button>
+          </div>
+        </div>
+      `).join('');
+
+      list.querySelectorAll('.delete-acta-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('¿Eliminar esta acta? Los estudiantes dejarán de verla.')) return;
+          try {
+            const actaId = btn.dataset.id;
+            const url = btn.dataset.url;
+            const storagePath = url.split('documentos-trayectos/')[1];
+
+            // 1. Eliminar de Storage
+            if (storagePath) {
+              await getSupabase().storage.from('documentos-trayectos').remove([storagePath]);
+            }
+            // 2. Eliminar de DB
+            const { error } = await getSupabase().from('actas').delete().eq('id', actaId);
+            if (error) throw error;
+
+            showToast('Acta eliminada');
+            loadActas();
+          } catch (err) { showToast(err.message, 'error'); }
+        });
+      });
+    } catch (err) { list.innerHTML = `<div style="color:var(--accent-red);">${err.message}</div>`; }
+  };
+
+  overlay.querySelector('#btn-save-acta').addEventListener('click', async () => {
+    const nombre = overlay.querySelector('#acta-new-nombre').value.trim();
+    const descripcion = overlay.querySelector('#acta-new-desc').value.trim();
+    const tipo = overlay.querySelector('#acta-new-tipo').value;
+    const submodulo_id = overlay.querySelector('#acta-new-submodulo').value || null;
+    const fileInput = overlay.querySelector('#acta-upload-input');
+    const status = overlay.querySelector('#acta-upload-status');
+
+    if (!nombre || fileInput.files.length === 0) {
+      showToast('Completá el nombre y seleccioná un archivo', 'error');
+      return;
+    }
+
+    if (tipo === 'modulo' && !submodulo_id) {
+      showToast('Seleccioná un módulo asociado', 'error');
+      return;
+    }
+
+    try {
+      status.textContent = 'Subiendo...';
+      const file = fileInput.files[0];
+      const fileExt = file.name.split('.').pop();
+      const fileName = `actas/${trayecto.id}/${Date.now()}.${fileExt}`;
+
+      const { data: storageData, error: storageError } = await getSupabase()
+        .storage.from('documentos-trayectos')
+        .upload(fileName, file);
+
+      if (storageError) throw storageError;
+
+      const { data: { publicUrl } } = getSupabase().storage.from('documentos-trayectos').getPublicUrl(fileName);
+
+      const { error: dbError } = await getSupabase().from('actas').insert({
+        nombre,
+        descripcion,
+        tipo,
+        archivo_url: publicUrl,
+        grupo_id: trayecto.id,
+        submodulo_id: submodulo_id,
+        fecha: new Date().toISOString().split('T')[0]
+      });
+
+      if (dbError) throw dbError;
+
+      showToast('Acta vinculada correctamente a todos los estudiantes');
+      overlay.querySelector('#acta-new-nombre').value = '';
+      overlay.querySelector('#acta-new-desc').value = '';
+      fileInput.value = '';
+      status.textContent = '';
+      loadActas();
+
+    } catch (err) {
+      status.textContent = 'Error: ' + err.message;
+      showToast(err.message, 'error');
+    }
+  });
+
+  loadActas();
 }
 
 export default { renderTrayectos };

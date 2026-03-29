@@ -2,8 +2,8 @@
 // Reportes y Búsqueda Avanzada
 // ============================================
 import { getContentArea, getPanelRight } from './layout.js';
-import { icons, sanitize, formatDate } from '../utils/helpers.js';
-import { fetchAll } from '../utils/data.js';
+import { icons, sanitize, formatDate, showToast, confirmDialog } from '../utils/helpers.js';
+import { fetchAll, remove } from '../utils/data.js';
 
 export async function renderReportes() {
   const content = getContentArea();
@@ -16,6 +16,7 @@ export async function renderReportes() {
   const trayectos = await fetchAll('trayectos_formativos');
   const inscripciones = await fetchAll('inscripciones');
   const seguimiento = await fetchAll('seguimiento_modulos');
+  const actas = await fetchAll('actas');
 
   // Años únicos
   const anios = [...new Set(estudiantes.map(e => e.anio_ingreso))].sort((a, b) => b - a);
@@ -80,12 +81,13 @@ export async function renderReportes() {
               <th>Trayectos</th>
               <th>Año Ingreso</th>
               <th>Estado</th>
+              <th>Doc.</th>
               <th>Mód. Específicos Aprobados</th>
               <th>Mód. Comunes Aprobados</th>
             </tr>
           </thead>
           <tbody id="report-tbody">
-            ${renderStudentRows(estudiantes, aprobaciones, modulos, submodulos, trayectos, inscripciones)}
+            ${renderStudentRows(estudiantes, aprobaciones, modulos, submodulos, trayectos, inscripciones, actas)}
           </tbody>
         </table>
       </div>
@@ -183,11 +185,16 @@ export async function renderReportes() {
 
   // Filtrar General
   document.getElementById('report-apply')?.addEventListener('click', () => {
-    applyFilters(estudiantes, aprobaciones, modulos, submodulos, trayectos, inscripciones);
+    applyFilters(estudiantes, aprobaciones, modulos, submodulos, trayectos, inscripciones, actas);
+    bindDocButtons(estudiantes, actas, submodulos, trayectos, inscripciones, seguimiento);
   });
   document.getElementById('report-search')?.addEventListener('input', () => {
-    applyFilters(estudiantes, aprobaciones, modulos, submodulos, trayectos, inscripciones);
+    applyFilters(estudiantes, aprobaciones, modulos, submodulos, trayectos, inscripciones, actas);
+    bindDocButtons(estudiantes, actas, submodulos, trayectos, inscripciones, seguimiento);
   });
+
+  // Botones Docs iniciales
+  bindDocButtons(estudiantes, actas, submodulos, trayectos, inscripciones, seguimiento);
 
   // Filtrar Egresados
   document.getElementById('report-egr-apply')?.addEventListener('click', () => {
@@ -280,13 +287,16 @@ function renderEgresadosRows(estudiantes, inscripciones, trayectos, seguimiento,
   }).join('');
 }
 
-function applyFilters(allEstudiantes, allAprobaciones, modulos, submodulos, trayectos, inscripciones) {
+function applyFilters(allEstudiantes, allAprobaciones, modulos, submodulos, trayectos, inscripciones, allActas) {
   const searchVal = (document.getElementById('report-search')?.value || '').toLowerCase();
   const anioVal = document.getElementById('report-anio')?.value;
   const moduloVal = document.getElementById('report-modulo')?.value;
   const estadoVal = document.getElementById('report-estado')?.value;
 
   let filtered = [...allEstudiantes];
+
+  // ... (filtro lógico existente) ...
+  // (Nota: se simplifica aquí por el multi_replace, se mantendrá la lógica original)
 
   // Filtrar por texto
   if (searchVal) {
@@ -315,26 +325,34 @@ function applyFilters(allEstudiantes, allAprobaciones, modulos, submodulos, tray
 
   const tbody = document.getElementById('report-tbody');
   if (tbody) {
-    tbody.innerHTML = renderStudentRows(filtered, allAprobaciones, modulos, submodulos, trayectos, inscripciones);
+    tbody.innerHTML = renderStudentRows(filtered, allAprobaciones, modulos, submodulos, trayectos, inscripciones, allActas);
   }
 }
 
-function renderStudentRows(estudiantes, aprobaciones, modulos, submodulos, trayectos = [], inscripciones = []) {
+function renderStudentRows(estudiantes, aprobaciones, modulos, submodulos, trayectos = [], inscripciones = [], allActas = []) {
   if (estudiantes.length === 0) {
-    return '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 32px;">No se encontraron resultados</td></tr>';
+    return '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 32px;">No se encontraron resultados</td></tr>';
   }
 
   return estudiantes.map(est => {
     const estAprobaciones = aprobaciones.filter(a => a.estudiante_id === est.id);
     const estInscripciones = inscripciones.filter(i => i.estudiante_id === est.id);
-    
+
+    // Docs vinculadas directamente al estudiante
+    const estActas = allActas.filter(a => a.estudiante_id === est.id);
+    const cantDocs = estActas.length;
+
+    // Siempre mostrar el botón: verde con cantidad si tiene docs, gris si no
+    const docBtn = cantDocs > 0
+      ? `<button class="btn-docs-ver" data-estid="${est.id}" title="Ver ${cantDocs} documento(s) de ${sanitize(est.nombre)}" style="background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.35);padding:3px 10px;border-radius:6px;font-size:0.75rem;cursor:pointer;font-weight:600;white-space:nowrap;transition:all 0.2s;">📄 ${cantDocs} doc${cantDocs !== 1 ? 's' : ''}</button>`
+      : `<button class="btn-docs-ver" data-estid="${est.id}" title="Sin documentos aún — clic para ver historial" style="background:rgba(255,255,255,0.04);color:var(--text-muted);border:1px dashed rgba(255,255,255,0.15);padding:3px 10px;border-radius:6px;font-size:0.75rem;cursor:pointer;font-weight:500;white-space:nowrap;transition:all 0.2s;">📂 Ver</button>`;
+
     const trayectosCursados = estInscripciones.map(i => {
       const t = trayectos.find(tray => tray.id === i.trayecto_id);
       if (!t) return null;
       let badgeClass = 'badge-pending';
       if (i.estado === 'Finalizado' || i.estado === 'Completo') badgeClass = 'badge-active';
       else if (i.estado === 'Abandono') badgeClass = 'badge-inactive';
-      
       return `<span class="badge ${badgeClass}" style="margin: 2px;">${sanitize(t.nombre)} <small style="opacity:0.8;">(${i.estado || 'En curso'})</small></span>`;
     }).filter(Boolean);
 
@@ -342,24 +360,216 @@ function renderStudentRows(estudiantes, aprobaciones, modulos, submodulos, traye
       .filter(a => a.modulo_id)
       .map(a => modulos.find(m => m.id === a.modulo_id)?.nombre || '')
       .filter(Boolean);
-      
+
     const submodulosAprobados = estAprobaciones
       .filter(a => a.submodulo_id)
       .map(a => submodulos.find(s => s.id === a.submodulo_id)?.nombre || '')
       .filter(Boolean);
 
     return `
-      <tr>
-        <td><strong>${sanitize(est.nombre)} ${sanitize(est.apellido)}</strong></td>
+      <tr class="report-student-row" data-estid="${est.id}" style="cursor:pointer;transition:background 0.15s;" title="Clic para ver documentación de ${sanitize(est.nombre)} ${sanitize(est.apellido)}">
+        <td>
+          <strong>${sanitize(est.nombre)} ${sanitize(est.apellido)}</strong>
+        </td>
         <td>${sanitize(est.dni)}</td>
         <td>${trayectosCursados.length > 0 ? trayectosCursados.join('<br/>') : '<span style="color: var(--text-muted);">Sin trayectos</span>'}</td>
         <td>${est.anio_ingreso}</td>
         <td><span class="badge ${est.estado === 'Activo' ? 'badge-active' : est.estado === 'Egresado' ? 'badge-approved' : 'badge-inactive'}">${est.estado}</span></td>
+        <td style="text-align:center;" class="doc-cell">${docBtn}</td>
         <td>${modulosAprobados.length > 0 ? modulosAprobados.map(m => `<span class="badge badge-approved" style="margin: 2px;">${sanitize(m)}</span>`).join('') : '<span style="color: var(--text-muted);">—</span>'}</td>
         <td>${submodulosAprobados.length > 0 ? submodulosAprobados.map(s => `<span class="badge badge-pending" style="margin: 2px;">${sanitize(s)}</span>`).join('') : '<span style="color: var(--text-muted);">—</span>'}</td>
       </tr>
     `;
   }).join('');
+}
+
+// ============================================
+// BIND: Botones Ver Docs + filas clickeables
+// ============================================
+function bindDocButtons(estudiantes, allActas, submodulos, trayectos, inscripciones, seguimiento) {
+  const openDocs = (estId) => {
+    const est = estudiantes.find(e => e.id === estId);
+    if (!est) return;
+    const estActas = allActas.filter(a => a.estudiante_id === estId);
+    openDocsModal(est, estActas, submodulos, trayectos, inscripciones, seguimiento);
+  };
+
+  // Botones explícitos de documentación
+  document.querySelectorAll('.btn-docs-ver').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openDocs(btn.dataset.estid);
+    });
+
+    // Efecto hover en el botón
+    btn.addEventListener('mouseenter', () => {
+      btn.style.transform = 'scale(1.05)';
+      btn.style.filter = 'brightness(1.2)';
+    });
+    btn.addEventListener('mouseleave', () => {
+      btn.style.transform = 'scale(1)';
+      btn.style.filter = 'brightness(1)';
+    });
+  });
+
+  // Clic en cualquier celda de la fila (excepto la celda de docs que ya tiene su botón)
+  document.querySelectorAll('.report-student-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      // Si el clic fue sobre el botón de docs o dentro de él, no hacer doble apertura
+      if (e.target.closest('.btn-docs-ver')) return;
+      openDocs(row.dataset.estid);
+    });
+
+    // Efecto hover en la fila
+    row.addEventListener('mouseenter', () => {
+      row.style.background = 'rgba(139,92,246,0.07)';
+    });
+    row.addEventListener('mouseleave', () => {
+      row.style.background = '';
+    });
+  });
+}
+
+// ============================================
+// MODAL: Historial de documentación del estudiante
+// ============================================
+async function openDocsModal(est, estActas, submodulos, trayectos, inscripciones, seguimiento) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+
+  // Array mutable local para poder actualizar sin recargar
+  const actasLocales = [...estActas];
+
+  overlay.innerHTML = `
+    <div class="modal" style="max-width:650px;width:95vw;">
+      <div class="modal-header">
+        <h3 class="modal-title">📂 Documentación — ${sanitize(est.nombre)} ${sanitize(est.apellido)}</h3>
+        <button class="modal-close" id="docs-modal-close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="docs-modal-body">
+        <!-- Se carga dinámicamente -->
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  overlay.querySelector('#docs-modal-close').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  const body = overlay.querySelector('#docs-modal-body');
+
+  const renderFilas = () => {
+    const ordenadas = [...actasLocales].sort((a, b) =>
+      new Date(b.fecha || b.created_at || 0) - new Date(a.fecha || a.created_at || 0)
+    );
+
+    // Actualizar contador del header
+    const countHint = overlay.querySelector('#docs-count');
+    if (countHint) countHint.textContent = `${ordenadas.length} documento(s)`;
+
+    if (ordenadas.length === 0) {
+      body.innerHTML = `
+        <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:14px;">DNI: ${sanitize(est.dni)} · 0 documentos registrados</p>
+        <div style="padding:32px;text-align:center;color:var(--text-muted);">No hay documentos registrados.</div>
+      `;
+      return;
+    }
+
+    body.innerHTML = `
+      <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:14px;" id="docs-count">DNI: ${sanitize(est.dni)} · ${ordenadas.length} documento(s) registrado(s)</p>
+      <div id="docs-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    `;
+
+    const list = body.querySelector('#docs-list');
+
+    ordenadas.forEach(acta => {
+      const submodulo = acta.submodulo_id ? submodulos.find(s => s.id === acta.submodulo_id) : null;
+      const trayecto = acta.grupo_id ? trayectos.find(t => t.id === acta.grupo_id) : null;
+      const condicion = acta.descripcion?.toUpperCase();
+      const condicionColor = condicion === 'APROBADO' ? '#10b981' : condicion === 'DESAPROBADO' ? '#ef4444' : 'var(--text-muted)';
+      const condicionBg = condicion === 'APROBADO' ? 'rgba(16,185,129,0.12)' : condicion === 'DESAPROBADO' ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.05)';
+      const fechaStr = acta.fecha ? formatDate(acta.fecha) : (acta.created_at ? formatDate(acta.created_at) : '—');
+
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:rgba(255,255,255,0.03);border:1px solid var(--border-color);border-radius:10px;gap:12px;';
+      row.innerHTML = `
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:0.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sanitize(acta.nombre)}</div>
+          <div style="font-size:0.73rem;color:var(--text-muted);margin-top:2px;">
+            ${submodulo ? sanitize(submodulo.nombre) : ''}${submodulo && trayecto ? ' · ' : ''}${trayecto ? sanitize(trayecto.nombre) : ''} · ${fechaStr}
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+          ${condicion ? `<span style="font-size:0.72rem;font-weight:700;padding:3px 9px;border-radius:999px;background:${condicionBg};color:${condicionColor};border:1px solid ${condicionColor}33;">${condicion}</span>` : ''}
+          <button class="btn-pdf-acta" style="padding:4px 10px;background:rgba(139,92,246,0.15);color:var(--accent-purple-light);border:1px solid rgba(139,92,246,0.3);border-radius:6px;font-size:0.75rem;cursor:pointer;font-weight:600;transition:all 0.2s;">⬇️ PDF</button>
+          <button class="btn-del-acta" title="Eliminar documento" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center;width:28px;height:28px;transition:all 0.2s;">${icons.trash}</button>
+        </div>
+      `;
+
+      // Hover efectos
+      const btnDel = row.querySelector('.btn-del-acta');
+      const btnPdf = row.querySelector('.btn-pdf-acta');
+      btnDel.addEventListener('mouseenter', () => { btnDel.style.background = 'rgba(239,68,68,0.3)'; btnDel.style.borderColor = 'rgba(239,68,68,0.7)'; });
+      btnDel.addEventListener('mouseleave', () => { btnDel.style.background = 'rgba(239,68,68,0.1)'; btnDel.style.borderColor = 'rgba(239,68,68,0.3)'; });
+
+      // Eliminar acta
+      btnDel.addEventListener('click', () => {
+        confirmDialog(`¿Eliminar "<strong>${sanitize(acta.nombre)}</strong>" del historial?<br><small style="color:var(--text-muted)">Esta acción no se puede deshacer.</small>`, async () => {
+          try {
+            await remove('actas', acta.id);
+            const idx = actasLocales.findIndex(a => a.id === acta.id);
+            if (idx !== -1) actasLocales.splice(idx, 1);
+            renderFilas();
+            showToast('Documento eliminado correctamente.');
+          } catch (err) {
+            showToast('Error al eliminar: ' + (err.message || 'Intente nuevamente.'), 'error');
+          }
+        });
+      });
+
+      // Re-generar PDF
+      btnPdf.addEventListener('click', async () => {
+        if (!acta.submodulo_id) {
+          showToast('No hay datos suficientes para regenerar el PDF.', 'error');
+          return;
+        }
+        btnPdf.textContent = '⏳ Generando...';
+        btnPdf.disabled = true;
+        try {
+          const insc = inscripciones.find(i => i.estudiante_id === est.id && i.trayecto_id === acta.grupo_id);
+          if (!insc) { showToast('No se encontró la inscripción del estudiante.', 'error'); return; }
+
+          const seg = seguimiento.find(s => s.inscripcion_id === insc.id && s.submodulo_id === acta.submodulo_id);
+          if (!seg || !seg.desempenos) { showToast('No se encontraron los datos de evaluación guardados.', 'error'); return; }
+
+          const { generarPDFDesdeHistorial } = await import('./actas.js');
+          const submodulo = submodulos.find(s => s.id === acta.submodulo_id);
+          const trayecto = trayectos.find(t => t.id === acta.grupo_id);
+
+          await generarPDFDesdeHistorial({
+            estudiante: est,
+            trayecto,
+            modulo: submodulo,
+            desempenos: seg.desempenos.criterios || {},
+            observaciones: seg.desempenos.observaciones || '',
+            condicion: seg.estado === 'Aprobado' ? 'APROBADO' : 'DESAPROBADO'
+          });
+          showToast('PDF regenerado correctamente.');
+        } catch (err) {
+          showToast('Error al regenerar el PDF: ' + err.message, 'error');
+        } finally {
+          btnPdf.textContent = '⬇️ PDF';
+          btnPdf.disabled = false;
+        }
+      });
+
+      list.appendChild(row);
+    });
+  };
+
+  renderFilas();
 }
 
 export default { renderReportes };

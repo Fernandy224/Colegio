@@ -38,93 +38,156 @@ export async function renderSubmodulos() {
         <p class="empty-state-text">Creá un módulo común y asocialo a un módulo específico existente.</p>
       </div>
     ` : `
-      <div class="cards-grid" style="grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px;">
-        ${submodulos.map(sub => {
-    const mod = modulos.find(m => m.id === sub.modulo_id);
-    const subUnidades = unidades
-      .filter(u => u.submodulo_id === sub.id)
-      .sort((a, b) => (a.orden || 0) - (b.orden || 0));
+      <div class="submodulos-folders-container" style="display:flex; flex-direction:column; gap:12px;">
+        ${(() => {
+          const groupedSubmodulos = {};
+          const sinProfesor = [];
+          
+          submodulos.forEach(sub => {
+            if (sub.profesor_id) {
+              if (!groupedSubmodulos[sub.profesor_id]) groupedSubmodulos[sub.profesor_id] = [];
+              groupedSubmodulos[sub.profesor_id].push(sub);
+            } else {
+              sinProfesor.push(sub);
+            }
+          });
 
-    return `
-            <div class="card" data-id="${sub.id}" style="align-items: stretch; cursor: default; padding: 12px 14px;">
-              <div class="card-actions">
-                ${(isAdmin || sub.profesor_id === myProfesor?.id) ? `
-                  <button class="card-action-btn edit-btn" data-id="${sub.id}" title="Editar">${icons.edit}</button>
-                  <button class="card-action-btn delete card-action-btn-del" data-id="${sub.id}" title="Eliminar">${icons.trash}</button>
-                ` : `<span style="font-size:0.6rem;padding:3px 7px;border-radius:999px;background:rgba(139,92,246,0.12);color:var(--text-muted);white-space:nowrap;">Solo lectura</span>`}
-              </div>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                ${(() => {
-        const prof = profesores.find(p => p.id === sub.profesor_id);
-        if (prof && prof.foto_url) {
-          return `<div class="card-avatar" style="width: 36px; height: 36px; flex-shrink: 0; background-image: url('${prof.foto_url}'); background-size: cover; background-position: center; border-radius: 50%;"></div>`;
-        }
-        return `<div class="card-avatar submodulo" style="width: 36px; height: 36px; font-size: 0.85rem; flex-shrink: 0;">
-                            ${sanitize(sub.nombre?.charAt(0) || 'M')}
-                          </div>`;
-      })()}
-                <div style="min-width: 0; flex: 1;">
-                  <div class="card-name" style="text-align: left; font-size: 0.85rem;">${sanitize(sub.nombre)}</div>
-                  <div class="card-subtitle" style="text-align: left; margin-top: 1px; font-size: 0.65rem;">Mód. Específico: ${mod ? sanitize(mod.nombre) : 'Sin módulo'}</div>
-                  ${(() => { const prof = profesores.find(p => p.id === sub.profesor_id); return prof ? `<div style="font-size:0.7rem;color:var(--accent-purple-light);margin-top:2px;">Prof. a cargo: ${sanitize(prof.nombre)} ${sanitize(prof.apellido || '')}</div>` : '<div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">Sin profesor asignado</div>'; })()}
-                  ${sub.descripcion ? `<div style="font-size:0.7rem;color:var(--text-secondary);margin-top:4px; max-width: 100%; white-space: normal; overflow-wrap: anywhere;">${sanitize(sub.descripcion)}</div>` : ''}
-                </div>
-              </div>
+          const generateCardsGrid = (items) => {
+            return `
+              <div class="cards-grid" style="grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; display: grid;">
+                ${items.map(sub => {
+                  const mod = modulos.find(m => m.id === sub.modulo_id);
+                  const subUnidades = unidades
+                    .filter(u => u.submodulo_id === sub.id)
+                    .sort((a, b) => (a.orden || 0) - (b.orden || 0));
 
-              <!-- Unidades -->
-              <div style="width: 100%; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border-color);">
-                <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px;">
-                  <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 600;">
-                    Unidades (${subUnidades.length})
-                  </span>
-                  <div style="display:flex;gap:4px;flex-wrap:wrap;">
-                    ${(isAdmin || sub.profesor_id === myProfesor?.id) ? `
-                    <button class="btn btn-secondary ver-asistencia-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
-                      📋 Asistencia
-                    </button>
-                    <button class="btn btn-secondary evaluar-submodulo-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
-                      📝 Evaluar
-                    </button>
-                    <button class="btn btn-secondary cronograma-submodulo-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
-                      🗓️ Cronograma
-                    </button>
-                    <button class="btn btn-secondary acta-submodulo-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}"
-                      style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;${!sub.plantilla_acta_id ? 'background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.35);color:#fbbf24;' : ''}">
-                      ${sub.plantilla_acta_id ? '📄 Acta' : '📋 Crear Acta'}
-                    </button>
-                    <button class="btn btn-secondary informe-grupal-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
-                      📊 Informe
-                    </button>
-                    ` : ''}
-                    ${(isAdmin || sub.profesor_id === myProfesor?.id) ? `
-                    <button class="btn btn-secondary add-unidad-btn" data-subid="${sub.id}" style="padding: 4px 10px; font-size: 0.75rem; border-radius: 6px;">
-                      ${icons.plus} Agregar
-                    </button>
-                    ` : ''}
-                  </div>
-                </div>
-                ${subUnidades.length === 0 ? `
-                  <p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 8px 0;">Sin unidades</p>
-                ` : `
-                  <div class="unidades-list" data-subid="${sub.id}">
-                    ${subUnidades.map((u, idx) => `
-                      <div class="unidad-item" data-uid="${u.id}">
-                        <span class="unidad-orden">${u.orden || (idx + 1)}</span>
-                        <span class="unidad-nombre">${sanitize(u.nombre)}</span>
+                  return `
+                    <div class="card" data-id="${sub.id}" style="align-items: stretch; cursor: default; padding: 12px 14px;">
+                      <div class="card-actions">
                         ${(isAdmin || sub.profesor_id === myProfesor?.id) ? `
-                        <div class="unidad-actions">
-                          <button class="unidad-action-btn edit-unidad-btn" data-uid="${u.id}" data-subid="${sub.id}" title="Editar">${icons.edit}</button>
-                          <button class="unidad-action-btn delete del-unidad-btn" data-uid="${u.id}" title="Eliminar">${icons.trash}</button>
-                        </div>
-                        ` : ''}
+                          <button class="card-action-btn edit-btn" data-id="${sub.id}" title="Editar">${icons.edit}</button>
+                          <button class="card-action-btn delete card-action-btn-del" data-id="${sub.id}" title="Eliminar">${icons.trash}</button>
+                        ` : `<span style="font-size:0.6rem;padding:3px 7px;border-radius:999px;background:rgba(139,92,246,0.12);color:var(--text-muted);white-space:nowrap;">Solo lectura</span>`}
                       </div>
-                    `).join('')}
-                  </div>
-                `}
+                      <div style="display: flex; align-items: center; gap: 8px;">
+                        ${(() => {
+                          const prof = profesores.find(p => p.id === sub.profesor_id);
+                          if (prof && prof.foto_url) {
+                            return `<div class="card-avatar" style="width: 36px; height: 36px; flex-shrink: 0; background-image: url('${prof.foto_url}'); background-size: cover; background-position: center; border-radius: 50%;"></div>`;
+                          }
+                          return `<div class="card-avatar submodulo" style="width: 36px; height: 36px; font-size: 0.85rem; flex-shrink: 0;">
+                                              ${sanitize(sub.nombre?.charAt(0) || 'M')}
+                                            </div>`;
+                        })()}
+                        <div style="min-width: 0; flex: 1;">
+                          <div class="card-name" style="text-align: left; font-size: 0.85rem;">${sanitize(sub.nombre)}</div>
+                          <div class="card-subtitle" style="text-align: left; margin-top: 1px; font-size: 0.65rem;">Mód. Específico: ${mod ? sanitize(mod.nombre) : 'Sin módulo'}</div>
+                          ${(() => { const prof = profesores.find(p => p.id === sub.profesor_id); return prof ? `<div style="font-size:0.7rem;color:var(--accent-purple-light);margin-top:2px;">Prof. a cargo: ${sanitize(prof.nombre)} ${sanitize(prof.apellido || '')}</div>` : '<div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">Sin profesor asignado</div>'; })()}
+                          ${sub.descripcion ? `<div style="font-size:0.7rem;color:var(--text-secondary);margin-top:4px; max-width: 100%; white-space: normal; overflow-wrap: anywhere;">${sanitize(sub.descripcion)}</div>` : ''}
+                        </div>
+                      </div>
+
+                      <!-- Unidades -->
+                      <div style="width: 100%; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border-color);">
+                        <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px;">
+                          <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); font-weight: 600;">
+                            Unidades (${subUnidades.length})
+                          </span>
+                          <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                            ${(isAdmin || sub.profesor_id === myProfesor?.id) ? `
+                            <button class="btn btn-secondary ver-asistencia-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
+                              📋 Asistencia
+                            </button>
+                            <button class="btn btn-secondary evaluar-submodulo-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
+                              📝 Evaluar
+                            </button>
+                            <button class="btn btn-secondary cronograma-submodulo-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
+                              🗓️ Cronograma
+                            </button>
+                            <button class="btn btn-secondary acta-submodulo-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}"
+                              style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;${!sub.plantilla_acta_id ? 'background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.35);color:#fbbf24;' : ''}">
+                              ${sub.plantilla_acta_id ? '📄 Acta' : '📋 Crear Acta'}
+                            </button>
+                            <button class="btn btn-secondary informe-grupal-btn" data-subid="${sub.id}" data-subnombre="${sanitize(sub.nombre)}" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 6px;">
+                              📊 Informe
+                            </button>
+                            ` : ''}
+                            ${(isAdmin || sub.profesor_id === myProfesor?.id) ? `
+                            <button class="btn btn-secondary add-unidad-btn" data-subid="${sub.id}" style="padding: 4px 10px; font-size: 0.75rem; border-radius: 6px;">
+                              ${icons.plus} Agregar
+                            </button>
+                            ` : ''}
+                          </div>
+                        </div>
+                        ${subUnidades.length === 0 ? `
+                          <p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; padding: 8px 0;">Sin unidades</p>
+                        ` : `
+                          <div class="unidades-list" data-subid="${sub.id}">
+                            ${subUnidades.map((u, idx) => `
+                              <div class="unidad-item" data-uid="${u.id}">
+                                <span class="unidad-orden">${u.orden || (idx + 1)}</span>
+                                <span class="unidad-nombre">${sanitize(u.nombre)}</span>
+                                ${(isAdmin || sub.profesor_id === myProfesor?.id) ? `
+                                <div class="unidad-actions">
+                                  <button class="unidad-action-btn edit-unidad-btn" data-uid="${u.id}" data-subid="${sub.id}" title="Editar">${icons.edit}</button>
+                                  <button class="unidad-action-btn delete del-unidad-btn" data-uid="${u.id}" title="Eliminar">${icons.trash}</button>
+                                </div>
+                                ` : ''}
+                              </div>
+                            `).join('')}
+                          </div>
+                        `}
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
               </div>
-            </div>
-          `;
-  }).join('')}
+            `;
+          };
+
+          const renderFolder = (title, items, isProf, profDetails) => {
+            if (items.length === 0) return '';
+            return `
+              <div class="folder-group" style="background: rgba(0,0,0,0.1); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden;">
+                <div class="folder-header" style="display:flex; align-items:center; justify-content:space-between; padding: 14px 20px; cursor: pointer; user-select: none; transition: background 0.2s;" onclick="const content = this.nextElementSibling; const isHidden = content.style.display === 'none'; content.style.display = isHidden ? 'block' : 'none'; const icon = this.querySelector('.folder-icon'); icon.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)'; this.style.borderBottom = isHidden ? '1px solid var(--border-color)' : 'none'; this.style.background = isHidden ? 'rgba(255,255,255,0.03)' : 'transparent';">
+                   <div style="display:flex; align-items:center; gap: 14px;">
+                       <svg class="folder-icon" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" style="color:var(--text-muted); transition: transform 0.2s; transform: rotate(0deg);"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                       ${isProf && profDetails?.foto_url ? `<div style="width:34px;height:34px;border-radius:50%;background-image:url('${profDetails.foto_url}');background-size:cover;background-position:center;border:2px solid rgba(255,255,255,0.1);"></div>` : `<div style="width:34px;height:34px;border-radius:8px;background:rgba(139,92,246,0.15);display:flex;align-items:center;justify-content:center;color:var(--accent-purple); border:1px solid rgba(139,92,246,0.3);">${icons.profesores}</div>`}
+                       <span style="font-weight: 600; font-size: 1.05rem; color: var(--text-primary);">${sanitize(title)}</span>
+                   </div>
+                   <div style="font-size: 0.8rem; font-weight:600; color: var(--accent-purple-light); background: rgba(139,92,246,0.15); padding: 4px 10px; border-radius: 20px;">
+                     ${items.length} ${items.length === 1 ? 'Módulo' : 'Módulos'}
+                   </div>
+                </div>
+                <div class="folder-content" style="display: none; padding: 20px; background: rgba(0,0,0,0.15);">
+                   ${generateCardsGrid(items)}
+                </div>
+              </div>
+            `;
+          };
+
+          let foldersHTML = '';
+          const profIds = Object.keys(groupedSubmodulos);
+          profIds.sort((a,b) => {
+              const pa = profesores.find(p => p.id === a);
+              const pb = profesores.find(p => p.id === b);
+              const nameA = pa ? (pa.nombre + ' ' + (pa.apellido||'')) : '';
+              const nameB = pb ? (pb.nombre + ' ' + (pb.apellido||'')) : '';
+              return nameA.localeCompare(nameB);
+          });
+
+          profIds.forEach(pid => {
+             const prof = profesores.find(p => p.id === pid);
+             const title = prof ? `Prof. ${prof.nombre} ${prof.apellido}` : 'Profesor Desconocido';
+             foldersHTML += renderFolder(title, groupedSubmodulos[pid], true, prof);
+          });
+
+          if (sinProfesor.length > 0) {
+             foldersHTML += renderFolder('Sin profesor asignado', sinProfesor, false, null);
+          }
+          
+          return foldersHTML;
+        })()}
       </div>
     `}
 

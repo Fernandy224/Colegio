@@ -15,6 +15,7 @@ import { renderReportes } from './components/reportes.js';
 import { renderUsuarios } from './components/usuarios.js';
 import { renderHorariosDocentes } from './components/horarios_docentes.js';
 import { renderPlantillasActas } from './components/plantillas_actas.js';
+import { renderCronograma } from './components/cronograma.js';
 import { renderResetPassword } from './components/reset-password.js';
 import { registerRoute, initRouter, setOnRouteChange } from './router.js';
 import { isSupabaseConfigured } from './supabaseClient.js';
@@ -61,6 +62,7 @@ function init() {
     registerRoute('trayectos', renderTrayectos);
     registerRoute('modulos', renderModulos);
     registerRoute('submodulos', renderSubmodulos);
+    registerRoute('cronograma', renderCronograma);
     registerRoute('aprobaciones', renderAprobaciones);
     registerRoute('reportes', renderReportes);
     registerRoute('usuarios', renderUsuarios);
